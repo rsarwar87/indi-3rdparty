@@ -29,6 +29,8 @@
 class EQMod; // TODO
 
 #include "simulator/simulator.h"
+#include <memory>
+#include <fpgaskytracker.hpp>
 
 #define SKYWATCHER_MAX_CMD      16
 #define SKYWATCHER_MAX_TRIES    3
@@ -263,7 +265,7 @@ class Skywatcher
         void InstantStopMotor(SkywatcherAxis axis);
         void StopWaitMotor(SkywatcherAxis axis);
         void SetFeature(SkywatcherAxis axis, uint32_t command);
-        void GetFeature(SkywatcherAxis axis, uint32_t command);
+        uint32_t GetFeature(SkywatcherAxis axis, uint32_t command);
         void TurnEncoder(SkywatcherAxis axis, bool on);
         uint32_t ReadEncoder(SkywatcherAxis axis);
         void ResetIndexer(SkywatcherAxis axis);
@@ -275,8 +277,10 @@ class Skywatcher
         void GetPPECStatus(SkywatcherAxis axis, bool *intraining, bool *inppec);
         void TurnSnapPort(SkywatcherAxis axis, bool on);
 
+#ifndef _KOHERON
         bool read_eqmod();
         bool dispatch_command(SkywatcherCommand cmd, SkywatcherAxis axis, char *arg);
+#endif
 
         uint32_t Revu24str2long(char *);
         uint32_t Highstr2long(char *);
@@ -344,4 +348,5 @@ class Skywatcher
 
         const uint8_t EQMOD_TIMEOUT = 5;
         const uint8_t EQMOD_MAX_RETRY = 3;
+        std::unique_ptr<ASCOM_sky_interface> koheron_interface;
 };

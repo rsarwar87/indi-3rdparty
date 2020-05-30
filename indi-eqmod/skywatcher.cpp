@@ -32,6 +32,8 @@ Skywatcher::Skywatcher(EQMod *t)
     simulation    = false;
     telescope     = t;
     reconnect     = false;
+    if(const char* env_ip = std::getenv("SKY_IP"))
+      koheron_interface = std::make_unique<ASCOM_sky_interface>(env_ip,36000);
 }
 
 Skywatcher::~Skywatcher(void)
@@ -76,6 +78,9 @@ bool Skywatcher::Handshake()
         telescope->simulator->Connect();
     }
 
+#ifdef _KOHERON
+    MCVersion = koheron_interface->swp_get_BoardVersion(); 
+#else
     uint32_t tmpMCVersion = 0;
 
     dispatch_command(InquireMotorBoardVersion, Axis1, nullptr);
@@ -90,7 +95,7 @@ bool Skywatcher::Handshake()
                          "Mount not supported: mount code 0x%x (0x80=GT, 0x81=MF, 0x82=114GT, 0x90=DOB)", MountCode);
         //return false;
     }
-
+#endif
     return true;
 }
 
@@ -107,15 +112,20 @@ bool Skywatcher::Disconnect()
     //read_eqmod();
     }
     */
+    koheron_interface.reset();
     return true;
 }
 
 uint32_t Skywatcher::GetRAEncoder()
 {
     // Axis Position
+#ifdef _KOHERON
+    RAStep  = koheron_interface->swp_get_AxisPosition(Axis1); 
+#else
     dispatch_command(GetAxisPosition, Axis1, nullptr);
     //read_eqmod();
     RAStep = Revu24str2long(response + 1);
+#endif
     gettimeofday(&lastreadmotorposition[Axis1], nullptr);
     if (RAStep != lastRAStep)
     {
@@ -128,10 +138,14 @@ uint32_t Skywatcher::GetRAEncoder()
 uint32_t Skywatcher::GetDEEncoder()
 {
     // Axis Position
+#ifdef _KOHERON
+    DEStep = koheron_interface->swp_get_AxisPosition(Axis2); 
+#else
     dispatch_command(GetAxisPosition, Axis2, nullptr);
     //read_eqmod();
 
     DEStep = Revu24str2long(response + 1);
+#endif
     gettimeofday(&lastreadmotorposition[Axis2], nullptr);
     if (DEStep != lastDEStep)
     {
@@ -264,20 +278,32 @@ void Skywatcher::Init()
     if (!RAInitialized && !DEInitialized)
     {
         //Read initial stepper values
+#ifdef _KOHERON
+        RAStepInit = koheron_interface->swp_get_AxisPosition(Axis1); 
+        DEStepInit = koheron_interface->swp_get_AxisPosition(Axis2); 
+        if (RAStepInit == 0xFFFFFFFF || DEStepInit == 0xFFFFFFFF)
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Invalid AxisPosition", __func__);
+        if (!koheron_interface->swp_cmd_Initialize(Axis1))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to initialize: Axis%u", __func__, Axis1);
+
+        if (!koheron_interface->swp_cmd_Initialize(Axis2))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to initialize: Axis%u", __func__, Axis1);
+#else
         dispatch_command(GetAxisPosition, Axis1, nullptr);
         //read_eqmod();
         RAStepInit = Revu24str2long(response + 1);
         dispatch_command(GetAxisPosition, Axis2, nullptr);
         //read_eqmod();
         DEStepInit = Revu24str2long(response + 1);
-        LOGF_DEBUG("%s() : Motors not initialized -- read Init steps RAInit=%ld DEInit = %ld",
-                   __FUNCTION__, static_cast<long>(RAStepInit), static_cast<long>(DEStepInit));
-        // Energize motors
-        LOGF_DEBUG("%s() : Powering motors", __FUNCTION__);
         dispatch_command(Initialize, Axis1, nullptr);
         //read_eqmod();
         dispatch_command(Initialize, Axis2, nullptr);
         //read_eqmod();
+#endif
+        LOGF_DEBUG("%s() : Motors not initialized -- read Init steps RAInit=%ld DEInit = %ld",
+                   __FUNCTION__, static_cast<long>(RAStepInit), static_cast<long>(DEStepInit));
+        // Energize motors
+        LOGF_DEBUG("%s() : Powering motors", __FUNCTION__);
         RAStepHome = RAStepInit;
         DEStepHome = DEStepInit + (DESteps360 / 4);
     }
@@ -353,9 +379,15 @@ void Skywatcher::Init()
         //  LOGF_DEBUG("%s() : leaving encoders unchanged",
         //	     __FUNCTION__);
         //} else {
-        char cmdarg[7];
         LOGF_DEBUG("%s() : Mount in Park position -- setting encoders RA=%ld DE = %ld",
                    __FUNCTION__, static_cast<long>(telescope->GetAxis1Park()), static_cast<long>(telescope->GetAxis2Park()));
+#ifdef _KOHERON
+        if (!koheron_interface->swp_set_AxisPosition(Axis1, telescope->GetAxis1Park()))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Park position: Axis%u", __func__, Axis1);
+        if (!koheron_interface->swp_set_AxisPosition(Axis2, telescope->GetAxis2Park()))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Park position: Axis%u", __func__, Axis1);
+#else
+        char cmdarg[7];
         cmdarg[6] = '\0';
         long2Revu24str(telescope->GetAxis1Park(), cmdarg);
         dispatch_command(SetAxisPositionCmd, Axis1, cmdarg);
@@ -363,6 +395,7 @@ void Skywatcher::Init()
         cmdarg[6] = '\0';
         long2Revu24str(telescope->GetAxis2Park(), cmdarg);
         dispatch_command(SetAxisPositionCmd, Axis2, cmdarg);
+#endif
         //read_eqmod();
         //}
     }
@@ -376,12 +409,17 @@ void Skywatcher::Init()
         else
         {
             //mount is supposed to be in the home position (pointing Celestial Pole)
-            char cmdarg[7];
             LOGF_DEBUG("%s() : Mount in Home position -- setting encoders RA=%ld DE = %ld",
                        __FUNCTION__, static_cast<long>(RAStepHome), static_cast<long>(DEStepHome));
+#ifdef _KOHERON
+            if (!koheron_interface->swp_set_AxisPosition(Axis2, DEStepHome))
+              throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Park position: Axis%u", __func__, Axis1);
+#else
+            char cmdarg[7];
             cmdarg[6] = '\0';
             long2Revu24str(DEStepHome, cmdarg);
             dispatch_command(SetAxisPositionCmd, Axis2, cmdarg);
+#endif
             //read_eqmod();
             //LOGF_WARN("%s() : Mount is supposed to point North/South Celestial Pole", __FUNCTION__);
             //TODO mark mount as unparked?
@@ -481,10 +519,8 @@ void Skywatcher::InquireFeatures()
     uint32_t rafeatures = 0, defeatures = 0;
     try
     {
-        GetFeature(Axis1, GET_FEATURES_CMD);
-        rafeatures = Revu24str2long(response + 1);
-        GetFeature(Axis2, GET_FEATURES_CMD);
-        defeatures = Revu24str2long(response + 1);
+        rafeatures = GetFeature(Axis1, GET_FEATURES_CMD);
+        defeatures = GetFeature(Axis2, GET_FEATURES_CMD);
     }
     catch (EQModError e)
     {
@@ -563,15 +599,32 @@ void Skywatcher::InquireRAEncoderInfo(INumberVectorProperty *encoderNP)
     double steppersvalues[3];
     const char *steppersnames[] = { "RASteps360", "RAStepsWorm", "RAHighspeedRatio" };
     // Steps per 360 degrees
+#ifdef _KOHERON
+    RASteps360 = koheron_interface->swp_get_GridPerRevolution(Axis1);
+    if (RASteps360 == 0xFFFFFFFF)
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_GridPerRevolution: Axis%u", __func__, Axis1);
+    RAStepsWorm = koheron_interface->swp_get_TimerInterruptFreq();
+    if (RAStepsWorm == 0xFFFFFFFF)
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_TimerInterruptFreq: Axis%u", __func__, Axis1);
+    RAHighspeedRatio = (uint32_t)koheron_interface->swp_get_HighSpeedRatio(Axis1);
+    if (RAHighspeedRatio == 0xFFFFFFFF)
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_HighSpeedRatio: Axis%u", __func__, Axis1);
+#else
     dispatch_command(InquireGridPerRevolution, Axis1, nullptr);
     //read_eqmod();
     RASteps360        = Revu24str2long(response + 1);
-    steppersvalues[0] = (double)RASteps360;
-
     // Steps per Worm
     dispatch_command(InquireTimerInterruptFreq, Axis1, nullptr);
     //read_eqmod();
     RAStepsWorm = Revu24str2long(response + 1);
+    // Highspeed Ratio
+    dispatch_command(InquireHighSpeedRatio, Axis1, nullptr);
+    //read_eqmod();
+    //RAHighspeedRatio=Revu24str2long(response+1);
+    RAHighspeedRatio = Highstr2long(response + 1);
+#endif
+    steppersvalues[0] = (double)RASteps360;
+
     // There is a bug in the earlier version firmware(Before 2.00) of motor controller MC001.
     // Overwrite the GearRatio reported by the MC for 80GT mount and 114GT mount.
     if ((MCVersion & 0x0000FF) == 0x80)
@@ -597,34 +650,49 @@ void Skywatcher::InquireRAEncoderInfo(INumberVectorProperty *encoderNP)
 
     steppersvalues[1] = static_cast<double>(RAStepsWorm);
 
-    // Highspeed Ratio
-    dispatch_command(InquireHighSpeedRatio, Axis1, nullptr);
-    //read_eqmod();
-    //RAHighspeedRatio=Revu24str2long(response+1);
-    RAHighspeedRatio = Highstr2long(response + 1);
-
     steppersvalues[2] = static_cast<double>(RAHighspeedRatio);
     // should test this is ok
     IUUpdateNumber(encoderNP, steppersvalues, (char **)steppersnames, 3);
     IDSetNumber(encoderNP, nullptr);
 
     backlashperiod[Axis1] = static_cast<uint32_t>(((SKYWATCHER_STELLAR_DAY * RAStepsWorm) / static_cast<double>(RASteps360)) / SKYWATCHER_BACKLASH_SPEED_RA);
+#ifdef _KOHERON
+    if(koheron_interface->cmd_set_backlash_period(Axis1, backlashperiod[Axis1]))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set_backlash_period: Axis%u", __func__, Axis1);
+#endif
 }
 
 void Skywatcher::InquireDEEncoderInfo(INumberVectorProperty *encoderNP)
 {
     double steppersvalues[3];
     const char *steppersnames[] = { "DESteps360", "DEStepsWorm", "DEHighspeedRatio" };
+#ifdef _KOHERON
+    DESteps360 = koheron_interface->swp_get_GridPerRevolution(Axis2);
+    if (DESteps360 == 0xFFFFFFFF)
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_GridPerRevolution: Axis%u", __func__, Axis2);
+    DEStepsWorm = koheron_interface->swp_get_TimerInterruptFreq();
+    if (DEStepsWorm == 0xFFFFFFFF)
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_TimerInterruptFreq: Axis%u", __func__, Axis2);
+    DEHighspeedRatio = (uint32_t)koheron_interface->swp_get_HighSpeedRatio(Axis2);
+    if (DEHighspeedRatio == 0xFFFFFFFF)
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_HighSpeedRatio: Axis%u", __func__, Axis2);
+#else
     // Steps per 360 degrees
     dispatch_command(InquireGridPerRevolution, Axis2, nullptr);
     //read_eqmod();
     DESteps360        = Revu24str2long(response + 1);
-    steppersvalues[0] = (double)DESteps360;
-
     // Steps per Worm
     dispatch_command(InquireTimerInterruptFreq, Axis2, nullptr);
     //read_eqmod();
     DEStepsWorm = Revu24str2long(response + 1);
+    // Highspeed Ratio
+    dispatch_command(InquireHighSpeedRatio, Axis2, nullptr);
+    //read_eqmod();
+    //DEHighspeedRatio=Revu24str2long(response+1);
+    DEHighspeedRatio  = Highstr2long(response + 1);
+#endif
+    steppersvalues[0] = (double)DESteps360;
+
     // There is a bug in the earlier version firmware(Before 2.00) of motor controller MC001.
     // Overwrite the GearRatio reported by the MC for 80GT mount and 114GT mount.
     if ((MCVersion & 0x0000FF) == 0x80)
@@ -650,17 +718,17 @@ void Skywatcher::InquireDEEncoderInfo(INumberVectorProperty *encoderNP)
 
     steppersvalues[1] = static_cast<double>(DEStepsWorm);
 
-    // Highspeed Ratio
-    dispatch_command(InquireHighSpeedRatio, Axis2, nullptr);
-    //read_eqmod();
-    //DEHighspeedRatio=Revu24str2long(response+1);
-    DEHighspeedRatio  = Highstr2long(response + 1);
     steppersvalues[2] = static_cast<double>(DEHighspeedRatio);
     // should test this is ok
     IUUpdateNumber(encoderNP, steppersvalues, (char **)steppersnames, 3);
     IDSetNumber(encoderNP, nullptr);
     backlashperiod[Axis2] =
         (long)(((SKYWATCHER_STELLAR_DAY * (double)DEStepsWorm) / (double)DESteps360) / SKYWATCHER_BACKLASH_SPEED_DE);
+#ifdef _KOHERON
+    if(koheron_interface->cmd_set_backlash_period(Axis2, backlashperiod[Axis2]))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set_backlash_period: Axis%u", __func__, Axis2);
+#endif
+
 }
 
 bool Skywatcher::IsRARunning()
@@ -679,6 +747,36 @@ bool Skywatcher::IsDERunning()
 
 void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
 {
+#ifdef _KOHERON
+    // Initialized, running, direction, speedmode, isGoto, isSlew
+    std::array<bool, 8> response = koheron_interface->swp_get_AxisStatus(axis);
+    switch (axis)
+    {
+        case Axis1:
+          RAInitialized = response[0];
+          RARunning = response[1];
+          RAStatus.direction = (response[2]) ? FORWARD : BACKWARD;
+          RAStatus.speedmode = (response[3]) ? HIGHSPEED : LOWSPEED;
+          if (response[5]) 
+            RAStatus.slewmode = SLEW;
+          if (response[4]) 
+            RAStatus.slewmode = GOTO;
+          break;
+        case Axis2:
+          DEInitialized = response[0];
+          DERunning = response[1];
+          DEStatus.direction = (response[2]) ? FORWARD : BACKWARD;
+          DEStatus.speedmode = (response[3]) ? HIGHSPEED : LOWSPEED;
+          if (response[5]) 
+            DEStatus.slewmode = SLEW;
+          if (response[4]) 
+            DEStatus.slewmode = GOTO;
+          break;
+        default:
+          break;
+    }
+    
+#else
     dispatch_command(GetAxisStatus, axis, nullptr);
     //read_eqmod();
     switch (axis)
@@ -718,6 +816,7 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
         default:
             break;
     }
+#endif
     gettimeofday(&lastreadmotorstatus[axis], nullptr);
 }
 
@@ -760,7 +859,12 @@ void Skywatcher::SlewRA(double rate)
     SetMotion(Axis1, newstatus);
     SetSpeed(Axis1, period);
     if (!RARunning)
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
         StartMotor(Axis1);
+#endif
 }
 
 void Skywatcher::SlewDE(double rate)
@@ -806,7 +910,12 @@ void Skywatcher::SlewDE(double rate)
     SetMotion(Axis2, newstatus);
     SetSpeed(Axis2, period);
     if (!DERunning)
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
         StartMotor(Axis2);
+#endif
 }
 
 void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
@@ -846,7 +955,12 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
         else
             breaks = ((deltaraencoder > 200) ? 200 : deltaraencoder / 10);
         SetTargetBreaks(Axis1, breaks);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
         StartMotor(Axis1);
+#endif
     }
 
     if (deltadeencoder >= 0)
@@ -876,7 +990,12 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
         else
             breaks = ((deltadeencoder > 200) ? 200 : deltadeencoder / 10);
         SetTargetBreaks(Axis2, breaks);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
         StartMotor(Axis2);
+#endif
     }
 }
 
@@ -923,7 +1042,12 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
             breaks = ((deltaraencoder > 200) ? 200 : deltaraencoder / 10);
         breaks = (raup ? (raencoder - breaks) : (raencoder + breaks));
         SetAbsTargetBreaks(Axis1, breaks);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
         StartMotor(Axis1);
+#endif
     }
 
     if (deup)
@@ -954,7 +1078,12 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
             breaks = ((deltadeencoder > 200) ? 200 : deltadeencoder / 10);
         breaks = (deup ? (deencoder - breaks) : (deencoder + breaks));
         SetAbsTargetBreaks(Axis2, breaks);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
         StartMotor(Axis2);
+#endif
     }
 }
 
@@ -1055,7 +1184,12 @@ void Skywatcher::StartRATracking(double trackspeed)
     {
         SetRARate(rate);
         if (!RARunning)
-            StartMotor(Axis1);
+#ifdef _KOHERON
+          if (!koheron_interface->swp_cmd_StartMotion(Axis1, true, true))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
+          StartMotor(Axis1);
+#endif
     }
     else
         StopMotor(Axis1);
@@ -1074,7 +1208,12 @@ void Skywatcher::StartDETracking(double trackspeed)
     {
         SetDERate(rate);
         if (!DERunning)
-            StartMotor(Axis2);
+#ifdef _KOHERON
+          if (!koheron_interface->swp_cmd_StartMotion(Axis2, true, true))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__, Axis1);
+#else
+          StartMotor(Axis2);
+#endif
     }
     else
         StopMotor(Axis2);
@@ -1082,7 +1221,6 @@ void Skywatcher::StartDETracking(double trackspeed)
 
 void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period)
 {
-    char cmd[7];
     SkywatcherAxisStatus *currentstatus;
 
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- period=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(period));
@@ -1098,7 +1236,6 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period)
                   period, minperiods[axis]);
         period = minperiods[axis];
     }
-    long2Revu24str(period, cmd);
 
     if ((axis == Axis1) && (RARunning && (currentstatus->slewmode == GOTO || currentstatus->speedmode == HIGHSPEED)))
         throw EQModError(EQModError::ErrInvalidParameter,
@@ -1111,50 +1248,75 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period)
         RAPeriod = period;
     else
         DEPeriod = period;
+#ifdef _KOHERON
+    if (!koheron_interface->swp_set_StepPeriod(axis, currentstatus->slewmode == SLEW, period))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Pereiod: Axis%u", __func__, Axis1);
+#else
+    char cmd[7];
+    long2Revu24str(period, cmd);
     dispatch_command(SetStepPeriod, axis, cmd);
+#endif
     //read_eqmod();
 }
 
 void Skywatcher::SetTarget(SkywatcherAxis axis, uint32_t increment)
 {
+#ifdef _KOHERON
+    if (!koheron_interface->swp_set_GotoTargetIncrement(axis, increment))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set GOTO increment: Axis%u", __func__, Axis1);
+#else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- increment=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(increment));
     long2Revu24str(increment, cmd);
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(SetGotoTargetIncrement, axis, cmd);
+#endif
     //read_eqmod();
     Target[axis] = increment;
 }
 
 void Skywatcher::SetTargetBreaks(SkywatcherAxis axis, uint32_t increment)
 {
+#ifdef _KOHERON
+    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+#else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- increment=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(increment));
     long2Revu24str(increment, cmd);
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(SetBreakPointIncrement, axis, cmd);
+#endif
     //read_eqmod();
     TargetBreaks[axis] = increment;
 }
 
 void Skywatcher::SetAbsTarget(SkywatcherAxis axis, uint32_t target)
 {
+#ifdef _KOHERON
+    if (!koheron_interface->swp_set_GotoTarget(axis, target))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set GOTO target: Axis%u", __func__, Axis1);
+#else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- target=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(target));
     long2Revu24str(target, cmd);
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(SetGotoTarget, axis, cmd);
+#endif
     //read_eqmod();
     Target[axis] = target;
 }
 
 void Skywatcher::SetAbsTargetBreaks(SkywatcherAxis axis, uint32_t breakstep)
 {
+#ifdef _KOHERON
+    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+#else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- breakstep=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(breakstep));
     long2Revu24str(breakstep, cmd);
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(SetBreakStep, axis, cmd);
+#endif
     //read_eqmod();
     TargetBreaks[axis] = breakstep;
 }
@@ -1164,25 +1326,38 @@ void Skywatcher::SetFeature(SkywatcherAxis axis, uint32_t command)
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- command=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(command));
     long2Revu24str(command, cmd);
+#ifdef _KOHERON
+    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+#else
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(SetFeatureCmd, axis, cmd);
+#endif
     //read_eqmod();
 }
 
-void Skywatcher::GetFeature(SkywatcherAxis axis, uint32_t command)
+uint32_t Skywatcher::GetFeature(SkywatcherAxis axis, uint32_t command)
 {
+    uint32_t ret;
+#ifdef _KOHERON
+    if (command == 0)
+    ret = koheron_interface->swp_get_Feature(axis);
+    else
+    ret = koheron_interface->swp_get_Feature(axis);
+#else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- command=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(command));
     long2Revu24str(command, cmd);
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(GetFeatureCmd, axis, cmd);
+    ret = Revu24str2long(response + 1);
+#endif
+    return ret;
     //read_eqmod();
 }
 
 void Skywatcher::GetIndexer(SkywatcherAxis axis)
 {
-    GetFeature(axis, GET_INDEXER_CMD);
-    lastreadIndexer[axis] = Revu24str2long(response + 1);
+    lastreadIndexer[axis] = GetFeature(axis, GET_INDEXER_CMD);
 }
 
 void Skywatcher::GetRAIndexer()
@@ -1232,9 +1407,13 @@ void Skywatcher::TurnDEEncoder(bool on)
 
 uint32_t Skywatcher::ReadEncoder(SkywatcherAxis axis)
 {
+#ifdef _KOHERON
+    return koheron_interface->swp_get_AuxEncoder(axis);
+#else
     dispatch_command(InquireAuxEncoder, axis, nullptr);
     //read_eqmod();
     return Revu24str2long(response + 1);
+#endif
 }
 
 uint32_t Skywatcher::GetRAAuxEncoder()
@@ -1264,7 +1443,11 @@ void Skywatcher::SetST4GuideRate(SkywatcherAxis axis, unsigned char r)
     cmd[0] = r;
     cmd[1] = '\0';
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
+#ifdef _KOHERON
+    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+#else
     dispatch_command(SetST4GuideRateCmd, axis, cmd);
+#endif
     //read_eqmod();
 }
 
@@ -1284,12 +1467,16 @@ void Skywatcher::SetLEDBrightness(uint8_t value)
     char hexa[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
     cmd[0] = hexa[(value & 0xF0) >> 4];
     cmd[1] = hexa[(value & 0x0F)];
+#ifdef _KOHERON
+    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+#else
     try {
         dispatch_command(SetPolarScopeLED, Axis1, cmd);
     } catch (EQModError e) {
         DEBUGF(telescope->DBG_MOUNT, "%s(): Mount does not support led brightness  (%c command)", __FUNCTION__,
                    SetPolarScopeLED);
     }
+#endif
 }
 
 void Skywatcher::TurnRAPPECTraining(bool on)
@@ -1323,8 +1510,7 @@ void Skywatcher::TurnDEPPEC(bool on)
 void Skywatcher::GetPPECStatus(SkywatcherAxis axis, bool *intraining, bool *inppec)
 {
     uint32_t features = 0;
-    GetFeature(axis, GET_FEATURES_CMD);
-    features    = Revu24str2long(response + 1);
+    features    = GetFeature(axis, GET_FEATURES_CMD);
     *intraining = AxisFeatures[axis].inPPECTraining = features & 0x00000010;
     *inppec = AxisFeatures[axis].inPPEC = features & 0x00000020;
 }
@@ -1347,7 +1533,11 @@ void Skywatcher::TurnSnapPort(SkywatcherAxis axis, bool on)
         snapcmd[0]='0';
     snapportstatus[axis] = on;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- snap=%c", __FUNCTION__, AxisCmd[axis], snapcmd);
+#ifdef _KOHERON
+    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+#else
     dispatch_command(SetSnapPort, axis, snapcmd);
+#endif
     //read_eqmod();
 }
 
@@ -1375,12 +1565,17 @@ bool Skywatcher::GetSnapPort2Status()
 
 void Skywatcher::SetAxisPosition(SkywatcherAxis axis, uint32_t step)
 {
+#ifdef _KOHERON
+    if (!koheron_interface->swp_set_AxisPosition(axis, step))
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_set_AxisPosition: Axis%u", __func__, Axis1);
+#else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- step=%ld", __FUNCTION__, AxisCmd[axis], static_cast<long>(step));
     long2Revu24str(step, cmd);
     //IDLog("Setting target for axis %c  to %d\n", AxisCmd[axis], increment);
     dispatch_command(SetAxisPositionCmd, axis, cmd);
     //read_eqmod();
+#endif
 }
 
 void Skywatcher::SetRAAxisPosition(uint32_t step)
@@ -1395,9 +1590,10 @@ void Skywatcher::SetDEAxisPosition(uint32_t step)
 
 void Skywatcher::StartMotor(SkywatcherAxis axis)
 {
+    DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
+#ifndef _KOHERON
     bool usebacklash       = UseBacklash[axis];
     uint32_t backlash = Backlash[axis];
-    DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
 
     if (usebacklash)
     {
@@ -1487,6 +1683,7 @@ void Skywatcher::StartMotor(SkywatcherAxis axis)
         }
     }
     dispatch_command(StartMotion, axis, nullptr);
+#endif
     //read_eqmod();
 }
 
@@ -1551,7 +1748,13 @@ void Skywatcher::SetMotion(SkywatcherAxis axis, SkywatcherAxisStatus newstatus)
             (newstatus.slewmode != currentstatus->slewmode))
     {
         StopWaitMotor(axis);
+#ifdef _KOHERON
+        if (!koheron_interface->swp_set_MotionModeDirection(axis, (newstatus.direction == FORWARD),
+             (newstatus.slewmode == SLEW), (newstatus.speedmode != LOWSPEED)))
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set motion mode: Axis%u", __func__, Axis1);
+#else
         dispatch_command(SetMotionMode, axis, motioncmd);
+#endif 
         //read_eqmod();
     }
     //#endif
@@ -1577,7 +1780,13 @@ void Skywatcher::ResetMotions()
         motioncmd[1] = '0';
     else
         motioncmd[1] = '1';
+#ifdef _KOHERON
+    if (!koheron_interface->swp_set_MotionModeDirection(Axis1, (newstatus.direction == FORWARD),
+         (newstatus.slewmode == SLEW), (newstatus.speedmode != LOWSPEED)))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set motion mode: Axis%u", __func__, Axis1);
+#else
     dispatch_command(SetMotionMode, Axis1, motioncmd);
+#endif 
     //read_eqmod();
     NewStatus[Axis1] = newstatus;
 
@@ -1587,7 +1796,13 @@ void Skywatcher::ResetMotions()
         motioncmd[1] = '0';
     else
         motioncmd[1] = '1';
+#ifdef _KOHERON
+    if (!koheron_interface->swp_set_MotionModeDirection(Axis2, (newstatus.direction == FORWARD),
+         (newstatus.slewmode == SLEW), (newstatus.speedmode != LOWSPEED)))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set motor mode: Axis%u", __func__, Axis1);
+#else
     dispatch_command(SetMotionMode, Axis2, motioncmd);
+#endif 
     //read_eqmod();
     NewStatus[Axis2] = newstatus;
 }
@@ -1600,7 +1815,12 @@ void Skywatcher::StopMotor(SkywatcherAxis axis)
     if (axis == Axis2 && DERunning)
         LastRunningStatus[Axis2] = DEStatus;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StopAxis(axis, false))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis1);
+#else
     dispatch_command(NotInstantAxisStop, axis, nullptr);
+#endif 
     //read_eqmod();
 }
 
@@ -1612,7 +1832,12 @@ void Skywatcher::InstantStopMotor(SkywatcherAxis axis)
     if (axis == Axis2 && DERunning)
         LastRunningStatus[Axis2] = DEStatus;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StopAxis(axis, true))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor instantly: Axis%u", __func__, Axis1);
+#else
     dispatch_command(InstantAxisStop, axis, nullptr);
+#endif 
     //read_eqmod();
 }
 
@@ -1626,7 +1851,12 @@ void Skywatcher::StopWaitMotor(SkywatcherAxis axis)
     if (axis == Axis2 && DERunning)
         LastRunningStatus[Axis2] = DEStatus;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
+#ifdef _KOHERON
+    if (!koheron_interface->swp_cmd_StopAxis(axis, false))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis1);
+#else
     dispatch_command(NotInstantAxisStop, axis, nullptr);
+#endif 
     //read_eqmod();
     if (axis == Axis1)
         motorrunning = &RARunning;
@@ -1663,7 +1893,7 @@ double Skywatcher::get_max_rate()
 {
     return MAX_RATE;
 }
-
+#ifndef _KOHERON
 bool Skywatcher::dispatch_command(SkywatcherCommand cmd, SkywatcherAxis axis, char *command_arg)
 {
     for (uint8_t i = 0; i < EQMOD_MAX_RETRY; i++)
@@ -1763,7 +1993,7 @@ bool Skywatcher::read_eqmod()
 
     return true;
 }
-
+#endif
 uint32_t Skywatcher::Revu24str2long(char *s)
 {
     uint32_t res = 0;
@@ -1808,18 +2038,36 @@ void Skywatcher::long2Revu24str(uint32_t n, char *str)
 void Skywatcher::SetBacklashRA(uint32_t backlash)
 {
     Backlash[Axis1] = backlash;
+#ifdef _KOHERON
+    if (!koheron_interface->cmd_set_backlash_cycles(Axis1, backlash/10))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis1);
+    if (UseBacklash[Axis1]) SetBacklashUseRA(true);
+#endif
 }
 
 void Skywatcher::SetBacklashUseRA(bool usebacklash)
 {
     UseBacklash[Axis1] = usebacklash;
+#ifdef _KOHERON
+    if (!koheron_interface->cmd_enable_backlash(Axis1, usebacklash))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis1);
+#endif
 }
 void Skywatcher::SetBacklashDE(uint32_t backlash)
 {
     Backlash[Axis2] = backlash;
+#ifdef _KOHERON
+    if (!koheron_interface->cmd_set_backlash_cycles(Axis2, backlash/10))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis1);
+    if (UseBacklash[Axis2]) SetBacklashUseDE(true);
+#endif
 }
 
 void Skywatcher::SetBacklashUseDE(bool usebacklash)
 {
     UseBacklash[Axis2] = usebacklash;
+#ifdef _KOHERON
+    if (!koheron_interface->cmd_enable_backlash(Axis2, usebacklash))
+       throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis1);
+#endif
 }

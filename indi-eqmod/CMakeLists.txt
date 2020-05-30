@@ -15,6 +15,8 @@ find_package(GSL REQUIRED)
 set(EQMOD_VERSION_MAJOR 1)
 set(EQMOD_VERSION_MINOR 0)
 
+add_definitions(-D_KOHERON)
+
 if (CYGWIN)
 add_definitions(-U__STRICT_ANSI__)
 endif(CYGWIN)
@@ -37,7 +39,7 @@ include_directories( ${GSL_INCLUDE_DIR} )
 include(CMakeCommon)
 
 IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 6.9.9)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-overflow")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-overflow -std=c++14")
 ENDIF ()
 
 ########### EQMod ###############
@@ -81,6 +83,7 @@ endif(WITH_ALIGN)
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
 target_link_libraries(indi_eqmod_telescope rt)
 endif (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
+target_link_libraries(indi_eqmod_telescope -lfpgaskytracker)
 
 install(TARGETS indi_eqmod_telescope RUNTIME DESTINATION bin )
 
@@ -132,6 +135,7 @@ if(WITH_ALIGN)
 else(WITH_ALIGN)
   target_link_libraries(indi_azgti_telescope ${INDI_LIBRARIES} ${NOVA_LIBRARIES})
 endif(WITH_ALIGN)
+target_link_libraries(indi_azgti_telescope -lfpgaskytracker)
 
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
 target_link_libraries(indi_azgti_telescope rt)
