@@ -17,6 +17,7 @@
 
 #pragma once
 
+//#include "log.hpp"
 #include "eqmoderror.h"
 
 #include <inditelescope.h>
@@ -145,6 +146,7 @@ class Skywatcher
         static constexpr double MIN_RATE         = 0.05;
         static constexpr double MAX_RATE         = 800.0;
         uint32_t minperiods[2];
+        //syslog_stream klog;
 
         // Types
         enum SkywatcherCommand
