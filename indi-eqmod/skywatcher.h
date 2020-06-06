@@ -145,6 +145,7 @@ class Skywatcher
         static const char SkywatcherTrailingChar = 0x0d;
         static constexpr double MIN_RATE         = 0.05;
         static constexpr double MAX_RATE         = 800.0;
+        uint32_t kminperiods[2];
         uint32_t minperiods[2];
         //syslog_stream klog;
 

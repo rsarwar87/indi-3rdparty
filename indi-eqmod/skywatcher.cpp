@@ -522,6 +522,10 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
             break;
     }
     strcpy(boardinfo[0], "CUSTOM");
+#ifdef _KOHERON
+    kminperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) / 5;
+    kminperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) / 5;
+#endif
 
     boardinfo[1] = (char *)malloc(5);
     sprintf(boardinfo[1], "%04x", (MCVersion >> 8));
@@ -902,6 +906,13 @@ void Skywatcher::SlewRA(double rate)
     else
         newstatus.speedmode = LOWSPEED;
     SetMotion(Axis1, newstatus);
+#ifdef _KOHERON
+    koheron_interface->print_status(
+        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+                      "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
+                      "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
+                      std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
+#endif
     SetSpeed(Axis1, period);
     if (!RARunning)
 #ifdef _KOHERON
@@ -957,6 +968,13 @@ void Skywatcher::SlewDE(double rate)
     else
         newstatus.speedmode = LOWSPEED;
     SetMotion(Axis2, newstatus);
+#ifdef _KOHERON
+    koheron_interface->print_status(
+        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+                      "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
+                      "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
+                      std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
+#endif
     SetSpeed(Axis2, period);
     if (!DERunning)
 #ifdef _KOHERON
@@ -1009,7 +1027,7 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
             breaks = ((deltaraencoder > 200) ? 200 : deltaraencoder / 10);
         SetTargetBreaks(Axis1, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis1, false, true))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1048,7 +1066,7 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
             breaks = ((deltadeencoder > 200) ? 200 : deltadeencoder / 10);
         SetTargetBreaks(Axis2, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis2, false, true))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1196,6 +1214,13 @@ void Skywatcher::SetRARate(double rate)
                              "Can not change rate while motor is running (direction differs).");
     }
     SetMotion(Axis1, newstatus);
+#ifdef _KOHERON
+    koheron_interface->print_status(
+        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+                      "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
+                      "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
+                      std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
+#endif
     SetSpeed(Axis1, period);
 }
 
@@ -1239,6 +1264,13 @@ void Skywatcher::SetDERate(double rate)
                              "Can not change rate while motor is running (direction differs).");
     }
     SetMotion(Axis2, newstatus);
+#ifdef _KOHERON
+    koheron_interface->print_status(
+        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+                      "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
+                      "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
+                      std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
+#endif
     SetSpeed(Axis2, period);
 }
 
@@ -1327,7 +1359,9 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period)
     else
         DEPeriod = period;
 #ifdef _KOHERON
-    if (!koheron_interface->swp_set_StepPeriod(axis, currentstatus->slewmode == SLEW, period / 5))
+    if (period < kminperiods[axis])
+        period = kminperiods[axis];
+    if (!koheron_interface->swp_set_StepPeriod(axis, currentstatus->slewmode == SLEW, period * 5))
     {
         koheron_interface->print_log(__func__, "():  swp_set_StepPeriod: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Pereiod: Axis%u", __func__, axis);
@@ -1364,7 +1398,7 @@ void Skywatcher::SetTargetBreaks(SkywatcherAxis axis, uint32_t increment)
 {
 #ifdef _KOHERON
     koheron_interface->print_log(__func__, "():  am i relavent: Axis");
-    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
+//    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
 #else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- increment=%ld", __FUNCTION__, AxisCmd[axis],
