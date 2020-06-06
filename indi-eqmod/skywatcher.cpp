@@ -913,7 +913,7 @@ void Skywatcher::SlewRA(double rate)
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
 #endif
-    SetSpeed(Axis1, period);
+    SetSpeed(Axis1, period, &newstatus);
     if (!RARunning)
 #ifdef _KOHERON
         if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
@@ -975,7 +975,7 @@ void Skywatcher::SlewDE(double rate)
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
 #endif
-    SetSpeed(Axis2, period);
+    SetSpeed(Axis2, period, &newstatus);
     if (!DERunning)
 #ifdef _KOHERON
         if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
@@ -1017,9 +1017,9 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
     {
         SetMotion(Axis1, newstatus);
         if (useHighSpeed)
-            SetSpeed(Axis1, minperiods[Axis1]);
+            SetSpeed(Axis1, minperiods[Axis1], &newstatus);
         else
-            SetSpeed(Axis1, lowperiod);
+            SetSpeed(Axis1, lowperiod, &newstatus);
         SetTarget(Axis1, deltaraencoder);
         if (useHighSpeed)
             breaks = ((deltaraencoder > 3200) ? 3200 : deltaraencoder / 10);
@@ -1056,9 +1056,9 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
     {
         SetMotion(Axis2, newstatus);
         if (useHighSpeed)
-            SetSpeed(Axis2, minperiods[Axis2]);
+            SetSpeed(Axis2, minperiods[Axis2], &newstatus);
         else
-            SetSpeed(Axis2, lowperiod);
+            SetSpeed(Axis2, lowperiod, &newstatus);
         SetTarget(Axis2, deltadeencoder);
         if (useHighSpeed)
             breaks = ((deltadeencoder > 3200) ? 3200 : deltadeencoder / 10);
@@ -1111,9 +1111,9 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
     {
         SetMotion(Axis1, newstatus);
         if (useHighSpeed)
-            SetSpeed(Axis1, minperiods[Axis1]);
+            SetSpeed(Axis1, minperiods[Axis1], &newstatus);
         else
-            SetSpeed(Axis1, lowperiod);
+            SetSpeed(Axis1, lowperiod, &newstatus);
         SetAbsTarget(Axis1, raencoder);
         if (useHighSpeed)
             breaks = ((deltaraencoder > 3200) ? 3200 : deltaraencoder / 10);
@@ -1151,9 +1151,9 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
     {
         SetMotion(Axis2, newstatus);
         if (useHighSpeed)
-            SetSpeed(Axis2, minperiods[Axis2]);
+            SetSpeed(Axis2, minperiods[Axis2], &newstatus);
         else
-            SetSpeed(Axis2, lowperiod);
+            SetSpeed(Axis2, lowperiod, &newstatus);
         SetAbsTarget(Axis2, deencoder);
         if (useHighSpeed)
             breaks = ((deltadeencoder > 3200) ? 3200 : deltadeencoder / 10);
@@ -1221,7 +1221,7 @@ void Skywatcher::SetRARate(double rate)
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
 #endif
-    SetSpeed(Axis1, period);
+    SetSpeed(Axis1, period, &newstatus);
 }
 
 void Skywatcher::SetDERate(double rate)
@@ -1271,7 +1271,7 @@ void Skywatcher::SetDERate(double rate)
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
 #endif
-    SetSpeed(Axis2, period);
+    SetSpeed(Axis2, period, &newstatus);
 }
 
 void Skywatcher::StartRATracking(double trackspeed)
@@ -1328,18 +1328,22 @@ void Skywatcher::StartDETracking(double trackspeed)
         StopMotor(Axis2);
 }
 
-void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period)
+void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisStatus *cstate)
 {
     SkywatcherAxisStatus *currentstatus;
 
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- period=%ld", __FUNCTION__, AxisCmd[axis],
            static_cast<long>(period));
 
+#ifdef _KOHERON
+    currentstatus = cstate;
+#else
     ReadMotorStatus(axis);
     if (axis == Axis1)
         currentstatus = &RAStatus;
     else
         currentstatus = &DEStatus;
+#endif
     if ((currentstatus->speedmode == HIGHSPEED) && (period < minperiods[axis]))
     {
         LOGF_WARN("Setting axis %c period to minimum. Requested is %d, minimum is %d\n", AxisCmd[axis], period,

@@ -258,7 +258,7 @@ class Skywatcher
         void CheckMotorStatus(SkywatcherAxis axis);
         void ReadMotorStatus(SkywatcherAxis axis);
         void SetMotion(SkywatcherAxis axis, SkywatcherAxisStatus newstatus);
-        void SetSpeed(SkywatcherAxis axis, uint32_t period);
+        void SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisStatus *cstate);
         void SetTarget(SkywatcherAxis axis, uint32_t increment);
         void SetTargetBreaks(SkywatcherAxis axis, uint32_t increment);
         void SetAbsTarget(SkywatcherAxis axis, uint32_t target);
