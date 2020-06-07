@@ -37,7 +37,7 @@ Skywatcher::Skywatcher(EQMod *t)
         koheron_interface = std::make_unique<ASCOM_sky_interface>(env_ip, 36000);
     else
     {
-        koheron_interface->print_log(__func__, "KOHERON SKY_IP NOT SET");
+        koheron_interface->print_error(__func__, "KOHERON SKY_IP NOT SET");
         throw EQModError(EQModError::ErrDisconnect, "KOHERON SKY_IP NOT SET");
     }
 #endif
@@ -86,7 +86,7 @@ bool Skywatcher::Handshake()
     }
 
 #ifdef _KOHERON
-    MCVersion = koheron_interface->swp_get_BoardVersion();
+    MCVersion = koheron_interface->SwpGetBoardVersion();
 #else
     uint32_t tmpMCVersion = 0;
 
@@ -128,7 +128,7 @@ uint32_t Skywatcher::GetRAEncoder()
 {
     // Axis Position
 #ifdef _KOHERON
-    RAStep = koheron_interface->swp_get_AxisPosition(Axis1);
+    RAStep = koheron_interface->SwpGetAxisPosition(Axis1);
 #else
     dispatch_command(GetAxisPosition, Axis1, nullptr);
     //read_eqmod();
@@ -147,7 +147,7 @@ uint32_t Skywatcher::GetDEEncoder()
 {
     // Axis Position
 #ifdef _KOHERON
-    DEStep = koheron_interface->swp_get_AxisPosition(Axis2);
+    DEStep = koheron_interface->SwpGetAxisPosition(Axis2);
 #else
     dispatch_command(GetAxisPosition, Axis2, nullptr);
     //read_eqmod();
@@ -287,22 +287,22 @@ void Skywatcher::Init()
     {
         //Read initial stepper values
 #ifdef _KOHERON
-        RAStepInit = koheron_interface->swp_get_AxisPosition(Axis1);
-        DEStepInit = koheron_interface->swp_get_AxisPosition(Axis2);
+        RAStepInit = koheron_interface->SwpGetAxisPosition(Axis1);
+        DEStepInit = koheron_interface->SwpGetAxisPosition(Axis2);
         if (RAStepInit == 0xFFFFFFFF || DEStepInit == 0xFFFFFFFF)
         {
-            koheron_interface->print_log(__func__, "():  Invalid AxisPosition: Axis");
+            koheron_interface->print_error(__func__, " Invalid AxisPosition: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Invalid AxisPosition", __func__);
         }
-        if (!koheron_interface->swp_cmd_Initialize(Axis1))
+        if (!koheron_interface->SwpCmdInitialize(Axis1))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_Initialize failed: Axis");
+            koheron_interface->print_error(__func__, " SwpCmdInitialize failed: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to initialize: Axis%u", __func__, Axis1);
         }
 
-        if (!koheron_interface->swp_cmd_Initialize(Axis2))
+        if (!koheron_interface->SwpCmdInitialize(Axis2))
         {
-            koheron_interface->print_log(__func__, "():  swp_set_AxisPswp_cmd_Initializeosition failed: Axis");
+            koheron_interface->print_error(__func__, " SwpSetAxisPSwpCmdInitializeosition failed: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to initialize: Axis%u", __func__, Axis2);
         }
 #else
@@ -399,14 +399,14 @@ void Skywatcher::Init()
         LOGF_DEBUG("%s() : Mount in Park position -- setting encoders RA=%ld DE = %ld", __FUNCTION__,
                    static_cast<long>(telescope->GetAxis1Park()), static_cast<long>(telescope->GetAxis2Park()));
 #ifdef _KOHERON
-        if (!koheron_interface->swp_set_AxisPosition(Axis1, telescope->GetAxis1Park()))
+        if (!koheron_interface->SwpSetAxisPosition(Axis1, telescope->GetAxis1Park()))
         {
-            koheron_interface->print_log(__func__, "():  swp_set_AxisPosition failed: Axis");
+            koheron_interface->print_error(__func__, " SwpSetAxisPosition failed: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Park position: Axis%u", __func__, Axis1);
         }
-        if (!koheron_interface->swp_set_AxisPosition(Axis2, telescope->GetAxis2Park()))
+        if (!koheron_interface->SwpSetAxisPosition(Axis2, telescope->GetAxis2Park()))
         {
-            koheron_interface->print_log(__func__, "():  swp_set_AxisPosition failed: Axis");
+            koheron_interface->print_error(__func__, " SwpSetAxisPosition failed: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Park position: Axis%u", __func__, Axis1);
         }
 #else
@@ -435,9 +435,9 @@ void Skywatcher::Init()
             LOGF_DEBUG("%s() : Mount in Home position -- setting encoders RA=%ld DE = %ld", __FUNCTION__,
                        static_cast<long>(RAStepHome), static_cast<long>(DEStepHome));
 #ifdef _KOHERON
-            if (!koheron_interface->swp_set_AxisPosition(Axis2, DEStepHome))
+            if (!koheron_interface->SwpSetAxisPosition(Axis2, DEStepHome))
             {
-                koheron_interface->print_log(__func__, "():  swp_set_AxisPosition failed: Axis");
+                koheron_interface->print_error(__func__, " SwpSetAxisPosition failed: Axis");
                 throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Park position: Axis%u", __func__,
                                  Axis1);
             }
@@ -630,25 +630,25 @@ void Skywatcher::InquireRAEncoderInfo(INumberVectorProperty *encoderNP)
     const char *steppersnames[] = { "RASteps360", "RAStepsWorm", "RAHighspeedRatio" };
     // Steps per 360 degrees
 #ifdef _KOHERON
-    RASteps360 = koheron_interface->swp_get_GridPerRevolution(Axis1);
+    RASteps360 = koheron_interface->SwpGetGridPerRevolution(Axis1);
     if (RASteps360 == 0xFFFFFFFF)
     {
-        koheron_interface->print_log(__func__, "():  swp_get_GridPerRevolution failed: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_GridPerRevolution: Axis%u", __func__,
+        koheron_interface->print_error(__func__, " SwpGetGridPerRevolution failed: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetGridPerRevolution: Axis%u", __func__,
                          Axis1);
     }
-    RAStepsWorm = koheron_interface->swp_get_TimerInterruptFreq() / 5;
+    RAStepsWorm = koheron_interface->SwpGetTimerInterruptFreq() / 5;
     if (RAStepsWorm == 0xFFFFFFFF)
     {
-        koheron_interface->print_log(__func__, "():  swp_get_TimerInterruptFreq failed: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_TimerInterruptFreq: Axis%u", __func__,
+        koheron_interface->print_error(__func__, " SwpGetTimerInterruptFreq failed: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetTimerInterruptFreq: Axis%u", __func__,
                          Axis1);
     }
-    RAHighspeedRatio = (uint32_t)koheron_interface->swp_get_HighSpeedRatio(Axis1);
+    RAHighspeedRatio = (uint32_t)koheron_interface->SwpGetHighSpeedRatio(Axis1);
     if (RAHighspeedRatio == 0xFFFFFFFF)
     {
-        koheron_interface->print_log(__func__, "():  swp_get_HighSpeedRatio failed: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_HighSpeedRatio: Axis%u", __func__, Axis1);
+        koheron_interface->print_error(__func__, " SwpGetHighSpeedRatio failed: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetHighSpeedRatio: Axis%u", __func__, Axis1);
     }
 #else
     dispatch_command(InquireGridPerRevolution, Axis1, nullptr);
@@ -707,25 +707,25 @@ void Skywatcher::InquireDEEncoderInfo(INumberVectorProperty *encoderNP)
     double steppersvalues[3];
     const char *steppersnames[] = { "DESteps360", "DEStepsWorm", "DEHighspeedRatio" };
 #ifdef _KOHERON
-    DESteps360 = koheron_interface->swp_get_GridPerRevolution(Axis2);
+    DESteps360 = koheron_interface->SwpGetGridPerRevolution(Axis2);
     if (DESteps360 == 0xFFFFFFFF)
     {
-        koheron_interface->print_log(__func__, "():  swp_get_GridPerRevolution failed: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_GridPerRevolution: Axis%u", __func__,
+        koheron_interface->print_error(__func__, " SwpGetGridPerRevolution failed: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetGridPerRevolution: Axis%u", __func__,
                          Axis2);
     }
-    DEStepsWorm = koheron_interface->swp_get_TimerInterruptFreq() / 5;
+    DEStepsWorm = koheron_interface->SwpGetTimerInterruptFreq() / 5;
     if (DEStepsWorm == 0xFFFFFFFF)
     {
-        koheron_interface->print_log(__func__, "():  swp_get_TimerInterruptFreq failed: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_TimerInterruptFreq: Axis%u", __func__,
+        koheron_interface->print_error(__func__, " SwpGetTimerInterruptFreq failed: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetTimerInterruptFreq: Axis%u", __func__,
                          Axis2);
     }
-    DEHighspeedRatio = (uint32_t)koheron_interface->swp_get_HighSpeedRatio(Axis2);
+    DEHighspeedRatio = (uint32_t)koheron_interface->SwpGetHighSpeedRatio(Axis2);
     if (DEHighspeedRatio == 0xFFFFFFFF)
     {
-        koheron_interface->print_log(__func__, "():  swp_get_HighSpeedRatio failed: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_get_HighSpeedRatio: Axis%u", __func__, Axis2);
+        koheron_interface->print_error(__func__, " SwpGetHighSpeedRatio failed: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetHighSpeedRatio: Axis%u", __func__, Axis2);
     }
 #else
     // Steps per 360 degrees
@@ -797,7 +797,7 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
 {
 #ifdef _KOHERON
     // Initialized, running, direction, speedmode, isGoto, isSlew
-    std::array<bool, 8> response = koheron_interface->swp_get_AxisStatus(axis);
+    std::array<bool, 8> response = koheron_interface->SwpGetAxisStatus(axis);
     switch (axis)
     {
         case Axis1:
@@ -908,7 +908,7 @@ void Skywatcher::SlewRA(double rate)
     SetMotion(Axis1, newstatus);
 #ifdef _KOHERON
     koheron_interface->print_status(
-        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+        __func__, "Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
                       "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
@@ -916,10 +916,10 @@ void Skywatcher::SlewRA(double rate)
     SetSpeed(Axis1, period, &newstatus);
     if (!RARunning)
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true, false))
+        if (!koheron_interface->SwpCmdStartMotion(Axis1, newstatus.slewmode == SLEW, true, false))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+            koheron_interface->print_error(__func__, " SwpCmdStartMotion: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                              Axis1);
         }
 #else
@@ -970,7 +970,7 @@ void Skywatcher::SlewDE(double rate)
     SetMotion(Axis2, newstatus);
 #ifdef _KOHERON
     koheron_interface->print_status(
-        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+        __func__, "Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
                       "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
@@ -978,10 +978,10 @@ void Skywatcher::SlewDE(double rate)
     SetSpeed(Axis2, period, &newstatus);
     if (!DERunning)
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true, false))
+        if (!koheron_interface->SwpCmdStartMotion(Axis2, newstatus.slewmode == SLEW, true, false))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+            koheron_interface->print_error(__func__, " SwpCmdStartMotion: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                              Axis2);
         }
 #else
@@ -1027,10 +1027,10 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
             breaks = ((deltaraencoder > 200) ? 200 : deltaraencoder / 10);
         SetTargetBreaks(Axis1, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, false, true, false))
+        if (!koheron_interface->SwpCmdStartMotion(Axis1, false, true, false))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+            koheron_interface->print_error(__func__, " SwpCmdStartMotion: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                              Axis1);
         }
 #else
@@ -1066,10 +1066,10 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
             breaks = ((deltadeencoder > 200) ? 200 : deltadeencoder / 10);
         SetTargetBreaks(Axis2, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, false, true, false))
+        if (!koheron_interface->SwpCmdStartMotion(Axis2, false, true, false))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+            koheron_interface->print_error(__func__, " SwpCmdStartMotion: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                              Axis2);
         }
 #else
@@ -1122,10 +1122,10 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
         breaks = (raup ? (raencoder - breaks) : (raencoder + breaks));
         SetAbsTargetBreaks(Axis1, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true, true))
+        if (!koheron_interface->SwpCmdStartMotion(Axis1, newstatus.slewmode == SLEW, true, true))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+            koheron_interface->print_error(__func__, " SwpCmdStartMotion: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                              Axis1);
         }
 #else
@@ -1162,10 +1162,10 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
         breaks = (deup ? (deencoder - breaks) : (deencoder + breaks));
         SetAbsTargetBreaks(Axis2, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true, true))
+        if (!koheron_interface->SwpCmdStartMotion(Axis2, newstatus.slewmode == SLEW, true, true))
         {
-            koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+            koheron_interface->print_error(__func__, " SwpCmdStartMotion: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                              Axis2);
         }
 #else
@@ -1216,7 +1216,7 @@ void Skywatcher::SetRARate(double rate)
     SetMotion(Axis1, newstatus);
 #ifdef _KOHERON
     koheron_interface->print_status(
-        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+        __func__, "Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
                       "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
@@ -1266,7 +1266,7 @@ void Skywatcher::SetDERate(double rate)
     SetMotion(Axis2, newstatus);
 #ifdef _KOHERON
     koheron_interface->print_status(
-        __func__, "(): Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
+        __func__, "Rate=" + std::to_string(absrate) + "; peroid=" + std::to_string(period) +
                       "; Axis=" + std::to_string(Axis1) + "; Highspeed " + std::to_string(useHighspeed) +
                       "; Highspeed Ratio " + std::to_string(DEHighspeedRatio) + "; Freq " +
                       std::to_string(RAStepsWorm) + "; Revolution" + std::to_string(RASteps360));
@@ -1287,10 +1287,10 @@ void Skywatcher::StartRATracking(double trackspeed)
         SetRARate(rate);
         if (!RARunning)
 #ifdef _KOHERON
-            if (!koheron_interface->swp_cmd_StartMotion(Axis1, true, true, false))
+            if (!koheron_interface->SwpCmdStartMotion(Axis1, true, true, false))
             {
-                koheron_interface->print_log(__func__, "():  swp_set_StepPerswp_cmd_StartMotioniod: Axis");
-                throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+                koheron_interface->print_error(__func__, " SwpSetStepPerSwpCmdStartMotioniod: Axis");
+                throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                                  Axis1);
             }
 #else
@@ -1314,10 +1314,10 @@ void Skywatcher::StartDETracking(double trackspeed)
         SetDERate(rate);
         if (!DERunning)
 #ifdef _KOHERON
-            if (!koheron_interface->swp_cmd_StartMotion(Axis2, true, true, false))
+            if (!koheron_interface->SwpCmdStartMotion(Axis2, true, true, false))
             {
-                koheron_interface->print_log(__func__, "():  swp_set_StepPerswp_cmd_StartMotioniod: Axis");
-                throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
+                koheron_interface->print_error(__func__, " SwpSetStepPerSwpCmdStartMotioniod: Axis");
+                throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
                                  Axis2);
             }
 #else
@@ -1365,9 +1365,9 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisSt
 #ifdef _KOHERON
     if (period < kminperiods[axis])
         period = kminperiods[axis];
-    if (!koheron_interface->swp_set_StepPeriod(axis, currentstatus->slewmode == SLEW, period * 5))
+    if (!koheron_interface->SwpSetStepPeriod(axis, currentstatus->slewmode == SLEW, period * 5))
     {
-        koheron_interface->print_log(__func__, "():  swp_set_StepPeriod: Axis");
+        koheron_interface->print_error(__func__, " SwpSetStepPeriod: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Pereiod: Axis%u", __func__, axis);
     }
 #else
@@ -1381,9 +1381,9 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisSt
 void Skywatcher::SetTarget(SkywatcherAxis axis, uint32_t increment)
 {
 #ifdef _KOHERON
-    if (!koheron_interface->swp_set_GotoTargetIncrement(axis, increment))
+    if (!koheron_interface->SwpSetGotoTargetIncrement(axis, increment))
     {
-        koheron_interface->print_log(__func__, "():  swp_set_GotoTargetIncrement: Axis");
+        koheron_interface->print_error(__func__, " SwpSetGotoTargetIncrement: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set GOTO increment: Axis%u", __func__, Axis1);
     }
 #else
@@ -1401,7 +1401,7 @@ void Skywatcher::SetTarget(SkywatcherAxis axis, uint32_t increment)
 void Skywatcher::SetTargetBreaks(SkywatcherAxis axis, uint32_t increment)
 {
 #ifdef _KOHERON
-    koheron_interface->print_log(__func__, "():  am i relavent: Axis");
+    koheron_interface->print_error(__func__, " am i relavent: Axis");
 //    throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
 #else
     char cmd[7];
@@ -1418,9 +1418,9 @@ void Skywatcher::SetTargetBreaks(SkywatcherAxis axis, uint32_t increment)
 void Skywatcher::SetAbsTarget(SkywatcherAxis axis, uint32_t target)
 {
 #ifdef _KOHERON
-    if (!koheron_interface->swp_set_GotoTarget(axis, target))
+    if (!koheron_interface->SwpSetGotoTarget(axis, target))
     {
-        koheron_interface->print_log(__func__, "():  swp_set_GotoTarget: Axis");
+        koheron_interface->print_error(__func__, " SwpSetGotoTarget: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set GOTO target: Axis%u", __func__, axis);
     }
 #else
@@ -1438,7 +1438,7 @@ void Skywatcher::SetAbsTarget(SkywatcherAxis axis, uint32_t target)
 void Skywatcher::SetAbsTargetBreaks(SkywatcherAxis axis, uint32_t breakstep)
 {
 #ifdef _KOHERON
-    koheron_interface->print_log(__func__, "():  am i relavent: Axis");
+    koheron_interface->print_error(__func__, " am i relavent: Axis");
     throw EQModError(EQModError::ErrCmdFailed, "%s(): Is that not relavent?: Axis%u", __func__, Axis1);
 #else
     char cmd[7];
@@ -1472,9 +1472,9 @@ uint32_t Skywatcher::GetFeature(SkywatcherAxis axis, uint32_t command)
     uint32_t ret;
 #ifdef _KOHERON
     if (command == 0)
-        ret = koheron_interface->swp_get_Feature(axis);
+        ret = koheron_interface->SwpGetFeature(axis);
     else
-        ret = koheron_interface->swp_get_Feature(axis);
+        ret = koheron_interface->SwpGetFeature(axis);
 #else
     char cmd[7];
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c -- command=%ld", __FUNCTION__, AxisCmd[axis],
@@ -1541,7 +1541,7 @@ void Skywatcher::TurnDEEncoder(bool on)
 uint32_t Skywatcher::ReadEncoder(SkywatcherAxis axis)
 {
 #ifdef _KOHERON
-    return koheron_interface->swp_get_AuxEncoder(axis);
+    return koheron_interface->SwpGetAuxEncoder(axis);
 #else
     dispatch_command(InquireAuxEncoder, axis, nullptr);
     //read_eqmod();
@@ -1700,10 +1700,10 @@ bool Skywatcher::GetSnapPort2Status()
 void Skywatcher::SetAxisPosition(SkywatcherAxis axis, uint32_t step)
 {
 #ifdef _KOHERON
-    if (!koheron_interface->swp_set_AxisPosition(axis, step))
+    if (!koheron_interface->SwpSetAxisPosition(axis, step))
     {
-        koheron_interface->print_log(__func__, "(): Failed swp_set_AxisPosition: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_set_AxisPosition: Axis%u", __func__, axis);
+        koheron_interface->print_error(__func__, "Failed SwpSetAxisPosition: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpSetAxisPosition: Axis%u", __func__, axis);
     }
 #else
     char cmd[7];
@@ -1885,12 +1885,12 @@ void Skywatcher::SetMotion(SkywatcherAxis axis, SkywatcherAxisStatus newstatus)
     {
         StopWaitMotor(axis);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_set_MotionModeDirection(axis, (newstatus.direction == FORWARD),
+        if (!koheron_interface->SwpSetMotionModeDirection(axis, (newstatus.direction == FORWARD),
                                                             (newstatus.slewmode == SLEW),
                                                             (newstatus.speedmode != LOWSPEED)))
         {
-            koheron_interface->print_log(__func__, "(): Failed swp_set_MotionModeDirection: Axis");
-            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_set_MotionModeDirection: Axis%u", __func__,
+            koheron_interface->print_error(__func__, "Failed SwpSetMotionModeDirection: Axis");
+            throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpSetMotionModeDirection: Axis%u", __func__,
                              axis);
         }
 #else
@@ -1922,10 +1922,10 @@ void Skywatcher::ResetMotions()
     else
         motioncmd[1] = '1';
 #ifdef _KOHERON
-    if (!koheron_interface->swp_set_MotionModeDirection(
+    if (!koheron_interface->SwpSetMotionModeDirection(
             Axis1, (newstatus.direction == FORWARD), (newstatus.slewmode == SLEW), (newstatus.speedmode != LOWSPEED)))
     {
-        koheron_interface->print_log(__func__, "(): Failed swp_set_MotionModeDirection: Axis");
+        koheron_interface->print_error(__func__, "Failed SwpSetMotionModeDirection: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set motion mode: Axis%u", __func__, Axis1);
     }
 #else
@@ -1941,10 +1941,10 @@ void Skywatcher::ResetMotions()
     else
         motioncmd[1] = '1';
 #ifdef _KOHERON
-    if (!koheron_interface->swp_set_MotionModeDirection(
+    if (!koheron_interface->SwpSetMotionModeDirection(
             Axis2, (newstatus.direction == FORWARD), (newstatus.slewmode == SLEW), (newstatus.speedmode != LOWSPEED)))
     {
-        koheron_interface->print_log(__func__, "(): Failed swp_set_MotionModeDirection: Axis");
+        koheron_interface->print_error(__func__, "Failed SwpSetMotionModeDirection: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set motor mode: Axis%u", __func__, Axis2);
     }
 #else
@@ -1963,10 +1963,10 @@ void Skywatcher::StopMotor(SkywatcherAxis axis)
         LastRunningStatus[Axis2] = DEStatus;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
 #ifdef _KOHERON
-    if (!koheron_interface->swp_cmd_StopAxis(axis, false))
+    if (!koheron_interface->SwpCmdStopAxis(axis, false))
     {
-        koheron_interface->print_log(__func__, "(): Failed swp_cmd_StopAxis: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed swp_cmd_StopAxis: Axis%u", __func__, axis);
+        koheron_interface->print_error(__func__, "Failed SwpCmdStopAxis: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed SwpCmdStopAxis: Axis%u", __func__, axis);
     }
 #else
     dispatch_command(NotInstantAxisStop, axis, nullptr);
@@ -1983,10 +1983,10 @@ void Skywatcher::InstantStopMotor(SkywatcherAxis axis)
         LastRunningStatus[Axis2] = DEStatus;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
 #ifdef _KOHERON
-    if (!koheron_interface->swp_cmd_StopAxis(axis, true))
+    if (!koheron_interface->SwpCmdStopAxis(axis, true))
     {
-        koheron_interface->print_log(__func__, "(): Failed swp_cmd_StopAxis: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_cmd_StopAxis: Axis%u", __func__, axis);
+        koheron_interface->print_error(__func__, "Failed SwpCmdStopAxis: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpCmdStopAxis: Axis%u", __func__, axis);
     }
 #else
     dispatch_command(InstantAxisStop, axis, nullptr);
@@ -2005,10 +2005,10 @@ void Skywatcher::StopWaitMotor(SkywatcherAxis axis)
         LastRunningStatus[Axis2] = DEStatus;
     DEBUGF(telescope->DBG_MOUNT, "%s() : Axis = %c", __FUNCTION__, AxisCmd[axis]);
 #ifdef _KOHERON
-    if (!koheron_interface->swp_cmd_StopAxis(axis, false))
+    if (!koheron_interface->SwpCmdStopAxis(axis, false))
     {
-        koheron_interface->print_log(__func__, "(): Failed swp_cmd_StopAxis: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to swp_cmd_StopAxis: Axis%u", __func__, axis);
+        koheron_interface->print_error(__func__, "Failed SwpCmdStopAxis: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpCmdStopAxis: Axis%u", __func__, axis);
     }
 #else
     dispatch_command(NotInstantAxisStop, axis, nullptr);
@@ -2198,7 +2198,7 @@ void Skywatcher::SetBacklashRA(uint32_t backlash)
 #ifdef _KOHERON
     if (!koheron_interface->cmd_set_backlash_cycles(Axis1, backlash / 10))
     {
-        koheron_interface->print_log(__func__, "(): Failed to cmd_set_backlash_cycles: Axis");
+        koheron_interface->print_error(__func__, "Failed to cmd_set_backlash_cycles: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to cmd_set_backlash_cycles: Axis%u", __func__, Axis1);
     }
     if (UseBacklash[Axis1])
@@ -2212,7 +2212,7 @@ void Skywatcher::SetBacklashUseRA(bool usebacklash)
 #ifdef _KOHERON
     if (!koheron_interface->cmd_enable_backlash(Axis1, usebacklash))
     {
-        koheron_interface->print_log(__func__, "(): Failed cmd_enable_backlashs: Axis");
+        koheron_interface->print_error(__func__, "Failed cmd_enable_backlashs: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed cmd_enable_backlash: Axis%u", __func__, Axis1);
     }
 #endif
@@ -2223,7 +2223,7 @@ void Skywatcher::SetBacklashDE(uint32_t backlash)
 #ifdef _KOHERON
     if (!koheron_interface->cmd_set_backlash_cycles(Axis2, backlash / 10))
     {
-        koheron_interface->print_log(__func__, "(): Failed cmd_set_backlash_cycles: Axis");
+        koheron_interface->print_error(__func__, "Failed cmd_set_backlash_cycles: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis2);
     }
     if (UseBacklash[Axis2])
