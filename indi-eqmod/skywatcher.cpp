@@ -916,7 +916,7 @@ void Skywatcher::SlewRA(double rate)
     SetSpeed(Axis1, period, &newstatus);
     if (!RARunning)
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true, false))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -978,7 +978,7 @@ void Skywatcher::SlewDE(double rate)
     SetSpeed(Axis2, period, &newstatus);
     if (!DERunning)
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true, false))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1027,7 +1027,7 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
             breaks = ((deltaraencoder > 200) ? 200 : deltaraencoder / 10);
         SetTargetBreaks(Axis1, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, false, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis1, false, true, false))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1066,7 +1066,7 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
             breaks = ((deltadeencoder > 200) ? 200 : deltadeencoder / 10);
         SetTargetBreaks(Axis2, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, false, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis2, false, true, false))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1122,7 +1122,7 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
         breaks = (raup ? (raencoder - breaks) : (raencoder + breaks));
         SetAbsTargetBreaks(Axis1, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis1, newstatus.slewmode == SLEW, true, true))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1162,7 +1162,7 @@ void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bo
         breaks = (deup ? (deencoder - breaks) : (deencoder + breaks));
         SetAbsTargetBreaks(Axis2, breaks);
 #ifdef _KOHERON
-        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true))
+        if (!koheron_interface->swp_cmd_StartMotion(Axis2, newstatus.slewmode == SLEW, true, true))
         {
             koheron_interface->print_log(__func__, "():  swp_cmd_StartMotion: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1287,7 +1287,7 @@ void Skywatcher::StartRATracking(double trackspeed)
         SetRARate(rate);
         if (!RARunning)
 #ifdef _KOHERON
-            if (!koheron_interface->swp_cmd_StartMotion(Axis1, true, true))
+            if (!koheron_interface->swp_cmd_StartMotion(Axis1, true, true, false))
             {
                 koheron_interface->print_log(__func__, "():  swp_set_StepPerswp_cmd_StartMotioniod: Axis");
                 throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
@@ -1314,7 +1314,7 @@ void Skywatcher::StartDETracking(double trackspeed)
         SetDERate(rate);
         if (!DERunning)
 #ifdef _KOHERON
-            if (!koheron_interface->swp_cmd_StartMotion(Axis2, true, true))
+            if (!koheron_interface->swp_cmd_StartMotion(Axis2, true, true, false))
             {
                 koheron_interface->print_log(__func__, "():  swp_set_StepPerswp_cmd_StartMotioniod: Axis");
                 throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set swp_cmd_StartMotion: Axis%u", __func__,
