@@ -1549,6 +1549,7 @@ double EQMod::EncoderFromHour(double hour, uint32_t initstep, uint32_t totalstep
 {
     double shifthour = 0.0;
     shifthour        = range24(hour - 6);
+    LOGF_INFO("%s(): shifthr = %f, hr = %f", __func__, shifthour, hour);
     if (h == NORTH)
         if (shifthour < 12.0)
             return round(initstep - ((shifthour / 24.0) * totalstep));
@@ -1582,6 +1583,7 @@ double EQMod::EncoderFromDegree(double degree, uint32_t initstep, uint32_t total
         target = 360.0 - target;
     if (target > 270.0)
         target -= 360.0;
+    LOGF_INFO("%s(): target = %f, degree = %f", __func__, target, degree);
     return round(initstep + ((target / 360.0) * totalstep));
 }
 
@@ -1657,6 +1659,7 @@ void EQMod::EncoderTarget(GotoParams *g)
         }
     }
 
+    LOGF_INFO("%s(): lst = %f, juliandate = %f", __func__, lst, juliandate);
     targetraencoder  = EncoderFromRA(r, g->pier_side, lst, zeroRAEncoder, totalRAEncoder, Hemisphere);
     targetdecencoder = EncoderFromDec(d, g->pier_side, zeroDEEncoder, totalDEEncoder, Hemisphere);
 
@@ -1958,6 +1961,10 @@ bool EQMod::Goto(double r, double d)
         gotoparams.limitwest        = zeroRAEncoder - (totalRAEncoder / 4) - (totalRAEncoder / 24); // ??
     }
 
+    LOGF_INFO("Slewing mount: RA current = %d, DE current = %d, Limit east(west) = %d(%d), Pier = %d",
+        gotoparams.racurrentencoder, gotoparams.decurrentencoder,
+        gotoparams.limiteast, gotoparams.limitwest, gotoparams.pier_side);
+
     if (gotoparams.pier_side != PIER_UNKNOWN)
     {
         LOG_WARN("Enforcing the pier side prevents a meridian flip and may lead to collisions of the telescope with obstacles.");
@@ -1979,6 +1986,9 @@ bool EQMod::Goto(double r, double d)
         mount->StopRA();
         mount->StopDE();
         // Start slewing
+        LOGF_INFO("Slewing mount: RA target(current) = %d(%d), DE target(current) = %d(%d)",
+                  gotoparams.ratargetencoder, gotoparams.racurrentencoder,
+                  gotoparams.detargetencoder, gotoparams.decurrentencoder);
         LOGF_INFO("Slewing mount: RA increment = %d, DE increment = %d",
                   static_cast<int>(gotoparams.ratargetencoder - gotoparams.racurrentencoder),
                   static_cast<int>(gotoparams.detargetencoder - gotoparams.decurrentencoder));

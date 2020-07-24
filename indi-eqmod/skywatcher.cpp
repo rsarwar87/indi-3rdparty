@@ -289,6 +289,10 @@ void Skywatcher::Init()
 #ifdef _KOHERON
         RAStepInit = koheron_interface->SwpGetAxisPosition(Axis1);
         DEStepInit = koheron_interface->SwpGetAxisPosition(Axis2);
+        RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
+        DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
+//        RAStepInit     = 0x0;
+//        DEStepInit     = 0x0;
         if (RAStepInit == 0xFFFFFFFF || DEStepInit == 0xFFFFFFFF)
         {
             koheron_interface->print_error(__func__, " Invalid AxisPosition: Axis");
@@ -331,6 +335,14 @@ void Skywatcher::Init()
         wasinitialized = true;
         RAStepInit     = 0x800000;
         DEStepInit     = 0x800000;
+#ifdef _KOHERON
+        RAStepInit     = koheron_interface->SwpGetAxisPosition(Axis1);
+        DEStepInit     = koheron_interface->SwpGetAxisPosition(Axis2);
+        RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
+        DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
+        //RAStepInit     = 0x0;
+        //DEStepInit     = 0x0;
+#endif
         RAStepHome     = RAStepInit;
         DEStepHome     = DEStepInit + (DESteps360 / 4);
         LOGF_WARN("%s() : Motors already initialized", __FUNCTION__);
@@ -995,8 +1007,18 @@ void Skywatcher::SlewTo(SkywatcherAxis axis, int32_t deltaencoder)
 {
     SkywatcherAxisStatus newstatus;
     bool useHighSpeed  = false;
-    uint32_t lowperiod = 18, lowspeedmargin = 20000, breaks = 400;
+    uint32_t period = 0, lowperiod = 9, lowspeedmargin = 20000, breaks = 400;
     /* highperiod = RA 450X DE (+5) 200x, low period 32x */
+    if (axis == Axis1)
+    {
+      period =
+        static_cast<uint32_t>(((SKYWATCHER_STELLAR_DAY * DEStepsWorm)/ static_cast<double>(DESteps360)) / 64);
+    }
+    else
+    {
+      period =
+        static_cast<uint32_t>(((SKYWATCHER_STELLAR_DAY * RAStepsWorm)/ static_cast<double>(RASteps360)) / 64);
+    }
     newstatus.slewmode = GOTO;
     if (deltaencoder >= 0)
         newstatus.direction = FORWARD;
@@ -1016,9 +1038,9 @@ void Skywatcher::SlewTo(SkywatcherAxis axis, int32_t deltaencoder)
     {
         SetMotion(axis, newstatus);
         if (useHighSpeed)
-            SetSpeed(axis, minperiods[axis], &newstatus);
+            SetSpeed(axis, period/lowperiod, &newstatus);
         else
-            SetSpeed(axis, lowperiod, &newstatus);
+            SetSpeed(axis, period, &newstatus);
         SetTarget(axis, deltaencoder);
 #ifdef _KOHERON
         if (!koheron_interface->SwpCmdStartMotion(axis, false, false, true))
@@ -1035,6 +1057,7 @@ void Skywatcher::SlewTo(SkywatcherAxis axis, int32_t deltaencoder)
         SetTargetBreaks(axis, breaks);
         StartMotor(axis);
 #endif
+    LOGF_DEBUG("%s(AXIS=%d) : delta = %d period = %d", __FUNCTION__, axis, deltaencoder, period);
     }
 }
 void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
@@ -1043,8 +1066,6 @@ void Skywatcher::SlewTo(int32_t deltaraencoder, int32_t deltadeencoder)
     LOGF_DEBUG("%s() : deltaRA = %d deltaDE = %d", __FUNCTION__, deltaraencoder, deltadeencoder);
     SlewTo(Axis1, deltaraencoder);
     SlewTo(Axis2, deltadeencoder);
-
-
 }
 
 void Skywatcher::AbsSlewTo(uint32_t raencoder, uint32_t deencoder, bool raup, bool deup)
@@ -1570,13 +1591,17 @@ void Skywatcher::TurnPPECTraining(SkywatcherAxis axis, bool on)
 
 void Skywatcher::SetLEDBrightness(uint8_t value)
 {
+#ifdef _KOHERON
+    if (!koheron_interface->SwpSetPolarScopeLED(value))
+    {
+        koheron_interface->print_error(__func__, "Failed SwpSetPolarScopeLED: Axis");
+    }
+
+#else
     char cmd[3]   = { 0 };
     char hexa[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
     cmd[0]        = hexa[(value & 0xF0) >> 4];
     cmd[1]        = hexa[(value & 0x0F)];
-#ifdef _KOHERON
-    LOGF_INFO("%s(): Is that not relavent?: Axis%u", __func__, Axis1);
-#else
     try
     {
         dispatch_command(SetPolarScopeLED, Axis1, cmd);
