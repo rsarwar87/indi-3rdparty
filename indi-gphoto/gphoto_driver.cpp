@@ -36,7 +36,9 @@
 #include "gphoto_driver.h"
 #include "dsusbdriver.h"
 #include <cmath>
-
+#ifdef _KOHERON
+#include <fpgacameratrigger.hpp>
+#endif
 #define EOS_CUSTOMFUNCEX                "customfuncex"
 #define EOS_MIRROR_LOCKUP_ENABLE        "20,1,3,14,1,60f,1,1"
 #define EOS_MIRROR_LOCKUP_DISABLE       "20,1,3,14,1,60f,1,0"
@@ -162,6 +164,10 @@ struct _gphoto_driver
     bool bulb_mode {false};
 
     DSUSBDriver *dsusb;
+
+#ifdef _KOHERON
+    indi_cameratrigger_interface* fpgatrigger;
+#endif
 
     gphoto_widget_list *widgets;
     gphoto_widget_list *iter;
@@ -617,6 +623,13 @@ static void *stop_bulb(void *arg)
                     DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Closing DSUSB shutter.");
                     gphoto->dsusb->closeShutter();
                 }
+#ifdef _KOHERON
+                else if (gphoto->fpgatrigger)
+                {
+                    DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Closing FPGA shutter.");
+                    gphoto->fpgatrigger->close_shutter();
+                }
+#endif
                 if (gphoto->bulb_widget)
                 {
                     DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Closing internal shutter.");
@@ -1077,9 +1090,17 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
     // JM 2018-09-23: In case force bulb is off, then we search for optimal exposure index
     if (gphoto->force_bulb == false &&
             // No external shutter port is specified OR
-            ((!gphoto->bulb_port[0] && !gphoto->dsusb) ||
+            ((!gphoto->bulb_port[0] && !gphoto->dsusb 
+#ifdef _KOHERON
+              && !gphoto->fpgatrigger
+#endif
+              ) ||
              // External shutter port is specified but exposure time < 30 secs
-             ((gphoto->bulb_port[0] || gphoto->dsusb) && exptime_usec <= RELEASE_SHUTTER_THRESHOLD)))
+             ((gphoto->bulb_port[0] || gphoto->dsusb 
+#ifdef _KOHERON
+               || gphoto->fpgatrigger
+#endif
+               ) && exptime_usec <= RELEASE_SHUTTER_THRESHOLD)))
     {
         optimalExposureIndex = find_exposure_setting(gphoto, gphoto->exposure_widget, exptime_usec, true);
     }
@@ -1104,10 +1125,14 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
     // We take this route if any of the following conditions are met:
     // 1. Predefined Exposure List does not exist for the camera.
     // 2. An external shutter port or DSUSB is active (for > 1 second exposures or there is no optimal exposure)
-    //// 3. Exposure Time > 1 second or there is no optimal exposure and we have a bulb widget to trigger the custom time
+    // 3. Exposure Time > 1 second or there is no optimal exposure and we have a bulb widget to trigger the custom time
     // 3. There is no optimal exposure and we have a bulb widget to trigger the custom time
     if (gphoto->exposureList == nullptr ||
-            ( (gphoto->bulb_port[0] || gphoto->dsusb) &&  optimalExposureIndex == -1) ||
+            ( (gphoto->bulb_port[0] || gphoto->dsusb 
+#ifdef _KOHERON
+               || gphoto->fpgatrigger
+#endif
+            ) &&  optimalExposureIndex == -1) ||
             //(gphoto->bulb_widget != nullptr && (exptime_usec > 1e6 || optimalExposureIndex == -1)))
             (gphoto->bulb_widget != nullptr && optimalExposureIndex == -1))
     {
@@ -1143,9 +1168,13 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
         // If we have mirror lock enabled, let's lock mirror. Return on failure
         if (mirror_lock)
         {
-            if (gphoto->dsusb)
+            if (gphoto->dsusb 
+#ifdef _KOHERON
+               || gphoto->fpgatrigger
+#endif
+                 )
             {
-                DEBUGDEVICE(device, INDI::Logger::DBG_ERROR, "Using mirror lock with DSUSB is unsupported!");
+                DEBUGDEVICE(device, INDI::Logger::DBG_ERROR, "Using mirror lock with DSUSB/KoheronFPGATrigger is unsupported!");
                 return -1;
             }
 
@@ -1167,6 +1196,13 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
             DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using DSUSB to open shutter...");
             gphoto->dsusb->openShutter();
         }
+#ifdef _KOHERON
+        else if (gphoto->fpgatrigger)
+        {
+            DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using FPGA Trigger to open shutter...");
+            gphoto->fpgatrigger->open_shutter();
+        }
+#endif
         // Otherwise open regular remote serial shutter port
         else if (gphoto->bulb_port[0])
         {
@@ -1656,6 +1692,9 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
     gphoto->exposure_presets_count = 0;
     gphoto->max_exposure           = 3600;
     gphoto->min_exposure           = 0.001;
+#ifdef _KOHERON
+    gphoto->fpgatrigger            = nullptr;
+#endif
     gphoto->dsusb                  = nullptr;
     gphoto->force_bulb             = true;
     gphoto->last_sensor_temp       = -273.0; // 0 degrees Kelvin
@@ -1819,6 +1858,20 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
             DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG,"Using main usb cable for mirror locking");
         }*/
 
+#ifdef _KOHERON
+        if (!strcmp(gphoto->bulb_port, "KFPGA"))
+        {
+          if (const char *env_ip = std::getenv("SKY_IP"))
+          {
+            gphoto->fpgatrigger = new indi_cameratrigger_interface(env_ip, 36000);
+              DEBUGDEVICE(device, INDI::Logger::DBG_SESSION, "Connected to FpgaTrigger");
+          }
+          else
+          {
+            DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "%s KOHERON SKY_IP NOT SET %s", __func__);
+          }
+        }
+#endif
         if (!strcmp(gphoto->bulb_port, "DSUSB"))
         {
             gphoto->dsusb = new DSUSBDriver(device);

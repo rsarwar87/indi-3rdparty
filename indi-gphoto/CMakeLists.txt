@@ -16,6 +16,7 @@ SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -DDEBUG_FITS" )
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall" )
 SET(CMAKE_C_FLAGS_DEBUG "-O0 -g -DDEBUG_FITS" )
 
+add_definitions(-D_KOHERON)
 find_package(CFITSIO REQUIRED)
 find_package(INDI REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -88,6 +89,7 @@ SET_SOURCE_FILES_PROPERTIES(gphoto_readimage.cpp PROPERTIES COMPILE_FLAGS "-Wno-
 add_executable(indi_gphoto_ccd ${indigphoto_SRCS})
 
 target_link_libraries(indi_gphoto_ccd ${INDI_LIBRARIES} ${CFITSIO_LIBRARIES} ${GPHOTO2_LIBRARY} ${GPHOTO2_PORT_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${JPEG_LIBRARIES} ${LibRaw_LIBRARIES} ${ZLIB_LIBRARIES} ${TIFF_LIBRARY} ${TIFFXX_LIBRARY})
+target_link_libraries(indi_gphoto_ccd -lfpgacameratrigger)
 
 if (HAVE_WEBSOCKET)
     target_link_libraries(indi_gphoto_ccd ${Boost_LIBRARIES})
