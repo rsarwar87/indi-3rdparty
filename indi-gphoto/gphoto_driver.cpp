@@ -39,6 +39,7 @@
 #ifdef _KOHERON
 #include <fpgacameratrigger.hpp>
 #endif
+#include "rpigpio_trigger.hpp"
 #define EOS_CUSTOMFUNCEX                "customfuncex"
 #define EOS_MIRROR_LOCKUP_ENABLE        "20,1,3,14,1,60f,1,1"
 #define EOS_MIRROR_LOCKUP_DISABLE       "20,1,3,14,1,60f,1,0"
@@ -168,6 +169,7 @@ struct _gphoto_driver
 #ifdef _KOHERON
     indi_cameratrigger_interface* fpgatrigger;
 #endif
+    PiCameraTrigger * pitrigger;
 
     gphoto_widget_list *widgets;
     gphoto_widget_list *iter;
@@ -624,12 +626,17 @@ static void *stop_bulb(void *arg)
                     gphoto->dsusb->closeShutter();
                 }
 #ifdef _KOHERON
-                else if (gphoto->fpgatrigger)
+                if (gphoto->fpgatrigger)
                 {
                     DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Closing FPGA shutter.");
                     gphoto->fpgatrigger->close_shutter();
                 }
 #endif
+                if (gphoto->pitrigger)
+                {
+                  DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Closing Pi shutter.");
+                  gphoto->pitrigger->close_shutter();
+                }
                 if (gphoto->bulb_widget)
                 {
                     DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Closing internal shutter.");
@@ -1091,12 +1098,14 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
     if (gphoto->force_bulb == false &&
             // No external shutter port is specified OR
             ((!gphoto->bulb_port[0] && !gphoto->dsusb 
+              && !gphoto->pitrigger
 #ifdef _KOHERON
               && !gphoto->fpgatrigger
 #endif
               ) ||
              // External shutter port is specified but exposure time < 30 secs
              ((gphoto->bulb_port[0] || gphoto->dsusb 
+               || gphoto->pitrigger
 #ifdef _KOHERON
                || gphoto->fpgatrigger
 #endif
@@ -1129,6 +1138,7 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
     // 3. There is no optimal exposure and we have a bulb widget to trigger the custom time
     if (gphoto->exposureList == nullptr ||
             ( (gphoto->bulb_port[0] || gphoto->dsusb 
+               || gphoto->pitrigger
 #ifdef _KOHERON
                || gphoto->fpgatrigger
 #endif
@@ -1169,6 +1179,7 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
         if (mirror_lock)
         {
             if (gphoto->dsusb 
+               || gphoto->pitrigger
 #ifdef _KOHERON
                || gphoto->fpgatrigger
 #endif
@@ -1203,6 +1214,11 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
             gphoto->fpgatrigger->open_shutter();
         }
 #endif
+        else if (gphoto->pitrigger)
+        {
+            DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using Pi Trigger to open shutter...");
+            gphoto->pitrigger->open_shutter();
+        }
         // Otherwise open regular remote serial shutter port
         else if (gphoto->bulb_port[0])
         {
@@ -1693,6 +1709,7 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
     gphoto->max_exposure           = 3600;
     gphoto->min_exposure           = 0.001;
 #ifdef _KOHERON
+    gphoto->pitrigger              = nullptr;
     gphoto->fpgatrigger            = nullptr;
 #endif
     gphoto->dsusb                  = nullptr;
@@ -1858,6 +1875,11 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
             DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG,"Using main usb cable for mirror locking");
         }*/
 
+        if (strncmp(gphoto->bulb_port, "RPI", 3) == 0)
+        {
+          gphoto->pitrigger = new PiCameraTrigger(gphoto->bulb_port);
+          DEBUGDEVICE(device, INDI::Logger::DBG_SESSION, "Connected to RPiTrigger");
+        }
 #ifdef _KOHERON
         if (!strcmp(gphoto->bulb_port, "KFPGA"))
         {

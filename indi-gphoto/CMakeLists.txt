@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.0)
 PROJECT(indi_gphoto C CXX)
-
+set (CMAKE_CXX_STANDARD 14)
 set(INDI_GPHOTO_VERSION_MAJOR 3)
 set(INDI_GPHOTO_VERSION_MINOR 0)
 
