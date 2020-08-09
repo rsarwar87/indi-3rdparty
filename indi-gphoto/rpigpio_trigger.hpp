@@ -39,15 +39,9 @@ class PiGpioWrapper
         fclose(fhandle);
         m_dir = m_dir + out + "/direction";
         m_val = m_val + out + "/value";
-        //DEBUGFDEVICE("PiCameraTrigger", INDI::Logger::DBG_DEBUG, "PiGpioWrapper: Direction file descriptor: %s ...\n", m_dir);
-        //DEBUGFDEVICE("PiCameraTrigger", INDI::Logger::DBG_DEBUG, "PiGpioWrapper: Value file descriptor: %s ...\n", m_val);
         using namespace std::chrono_literals;
         std::this_thread::sleep_for(100ms);
         SetMode(isoutput);
-      }
-      else
-      {
-        //LOGF_ERROR("PiGpioWrapper: upable to export handle\n");
       }
    }
    ~PiGpioWrapper()
@@ -68,38 +62,32 @@ class PiGpioWrapper
    }
    void SetMode(bool isoutput)
    {  
-     //DEBUGFDEVICE("PiCameraTrigger", INDI::Logger::DBG_DEBUG, "PiGpioWrapper: %s: %s ...\n", __func__, m_dir);
      if (isoutput) m_mode = "out";
      else m_mode = "in";
      ptr_hdir = fopen(m_dir.c_str(), "w");
-     if (fwrite(m_mode.c_str(), m_mode.size(), 1, ptr_hdir) != 1)
-        //LOGF_ERROR("PiGpioWrapper: setting mode failed: %s \n", m_dir);
+     if (fwrite(m_mode.c_str(), m_mode.size(), 1, ptr_hdir) == 1)
      fclose(ptr_hdir);
    }
    bool ClearGpio()
    {
      if (m_mode == "in") 
-        //LOGF_ERROR("PiGpioWrapper: %s: direction set as input\n", __func__);
-     //DEBUGFDEVICE("PiCameraTrigger", INDI::Logger::DBG_DEBUG, "PiGpioWrapper: %s: %s ...", __func__, m_val);
+       return false;
     ptr_hval = fopen(m_val.c_str(), "w");
      const string out = "0";
      if (!fwrite(out.c_str(), out.size(), 1, ptr_hval))
-        //LOGF_ERROR("ClearGpio: clear bit failed: %s \n", m_dir);
+       return false;
      fclose(ptr_hval);
-        cout << "off" << endl;
      return true;
    }
    bool SetGpio()
    {
      if (m_mode == "in") 
-        //LOGF_ERROR("PiGpioWrapper: %s: direction set as input\n", __func__);
-    //DEBUGFDEVICE("PiCameraTrigger", INDI::Logger::DBG_DEBUG, "PiGpioWrapper: %s: %s ...\n", __func__, m_val);
+       return false;
     ptr_hval = fopen(m_val.c_str(), "w");
      const string out = "1";
      if (!fwrite(out.c_str(), out.size(), 1, ptr_hval))
-        //LOGF_ERROR("SetGpio: set bit failed: %s \n", m_val);
+       return false;
      fclose(ptr_hval);
-        cout << "on" << endl;
      return true;
    }
    int32_t GetValue()
@@ -121,17 +109,14 @@ class PiCameraTrigger
     size_t found = port.find('@');
     if (n != 1 || found != 3 || port.size() - found > 3) 
     {
-      //LOGF_ERROR("PiCameraTrigger: Invalid port descriptor: %s ...; n=%d, found=%d, size=%d\n", port.c_str(), n, found, port.size()-2);
       return;
     }
     port.erase(0, found + 1);
 		if (port.find_first_not_of("0123456789") != std::string::npos)
 		{
-      //LOGF_ERROR("PiCameraTrigger: Invalid port number: %s ... \n", port.c_str());
       return;
 
 		}
-    //DEBUGFDEVICE("PiCameraTrigger", INDI::Logger::DBG_DEBUG, "PiCameraTrigger: port descriptor: %s ... \n", port.c_str());
 		ptr_gpio = make_unique<PiGpioWrapper>(port,true);
   }
 
@@ -155,7 +140,6 @@ class PiCameraTrigger
 };
 
 #if 0
-
 int main()
 {
 
@@ -171,5 +155,4 @@ int main()
     std::this_thread::sleep_for(1s);
   }
 }
-
 #endif
