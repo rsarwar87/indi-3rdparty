@@ -1890,7 +1890,8 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
           }
           else
           {
-            DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "%s KOHERON SKY_IP NOT SET %s", __func__);
+            DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "%s KOHERON SKY_IP NOT SET; trying localhost", __func__);
+            gphoto->fpgatrigger = new indi_cameratrigger_interface("127.0.0.1", 36000);
           }
         }
 #endif

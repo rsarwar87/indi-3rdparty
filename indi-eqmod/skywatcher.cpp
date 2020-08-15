@@ -37,8 +37,8 @@ Skywatcher::Skywatcher(EQMod *t)
         koheron_interface = std::make_unique<ASCOM_sky_interface>(env_ip, 36000);
     else
     {
-        koheron_interface->print_error(__func__, "KOHERON SKY_IP NOT SET");
-        throw EQModError(EQModError::ErrDisconnect, "KOHERON SKY_IP NOT SET");
+        koheron_interface->print_error(__func__, "KOHERON SKY_IP NOT SET, targetting localhost");
+        koheron_interface = std::make_unique<ASCOM_sky_interface>("127.0.0.1", 36000);
     }
 #endif
 }
