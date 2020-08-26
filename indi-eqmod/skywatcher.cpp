@@ -2066,15 +2066,25 @@ bool Skywatcher::dispatch_command(SkywatcherCommand cmd, SkywatcherAxis axis, ch
         int nbytes_written = 0;
         if (!isSimulation())
         {
-            int err_code = 0, nbytes_written = 0;
+            int err_code = 0;
             tcflush(PortFD, TCIOFLUSH);
 
             if ((err_code = tty_write_string(PortFD, command, &nbytes_written)) != TTY_OK)
             {
-                char ttyerrormsg[ERROR_MSG_LENGTH];
-                tty_error_msg(err_code, ttyerrormsg, ERROR_MSG_LENGTH);
-                throw EQModError(EQModError::ErrDisconnect, "tty write failed, check connection: %s", ttyerrormsg);
-                //return false;
+                if (i == EQMOD_MAX_RETRY - 1)
+                {
+                    char ttyerrormsg[ERROR_MSG_LENGTH];
+                    tty_error_msg(err_code, ttyerrormsg, ERROR_MSG_LENGTH);
+                    throw EQModError(EQModError::ErrDisconnect, "tty write failed, check connection: %s", ttyerrormsg);
+                }
+                else
+                {
+                    struct timespec wait;
+                    wait.tv_sec  = 0;
+                    wait.tv_nsec = 100000000; // 100ms
+                    nanosleep(nullptr, &wait);
+                    continue;
+                }
             }
         }
         else
