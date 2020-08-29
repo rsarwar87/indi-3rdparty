@@ -40,6 +40,7 @@ public:
 	static void updateStatusHelper(void *context);
 	static void updateTemperatureHelper(void *context);
 	static void temperatureCompensationHelper(void *context);
+  bool SyncFocuser( uint32_t ticks ) override;
 protected:
 	virtual IPState MoveAbsFocuser(int ticks);
 	virtual IPState MoveRelFocuser(FocusDirection dir, int ticks);
@@ -61,6 +62,8 @@ private:
 	ITextVectorProperty ActiveTelescopeTP;
 	ISwitchVectorProperty MotorBoardSP;
 
+	ISwitch BacklashCorrectionS[2];
+	ISwitchVectorProperty BacklashCorrectionSP;
 	ISwitch ResetAbsPosS[1];
 	ISwitchVectorProperty ResetAbsPosSP;
 	ISwitch TemperatureCompensateS[2];
@@ -80,9 +83,12 @@ private:
 	INumber TemperatureCoefN[1];
 	INumberVectorProperty TemperatureCoefNP;
 
+	double motorPeriodUs;
 	float lastTemperature;
+	bool reverse_direction = false;
 
 	void updateStatus();
+	void updateStatusFunc();
 	int updateStatusID { -1 };
 	void getFocuserInfo();
 	int updateTemperatureID { -1 };
@@ -93,7 +99,7 @@ private:
   bool hw_is_initialized {false};
   bool hw_is_running {false};
   bool hw_direction {false};
-
+  bool detected_motion {false};
 
   bool validateIpAddress(const std::string &ipAddress)
   {
@@ -102,6 +108,12 @@ private:
     return result != 0;
   }
 
+  bool is_number(const std::string& s)
+  {
+    std::string::const_iterator it = s.begin();
+    while (it != s.end() && std::isdigit(*it)) ++it;
+    return !s.empty() && it == s.end();
+  }
   std::unique_ptr<indi_focuser_interface> koheron_interface;
 };
 

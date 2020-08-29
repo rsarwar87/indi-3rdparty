@@ -35,6 +35,7 @@
 #include "config.h"
 
 #include "fpga_focuser.h"
+#include <connectionplugins/connectiontcp.h>
 
 // We declare an auto pointer to FpgaFocuser.
 std::unique_ptr<FpgaFocuser> fpgaFocuser(new FpgaFocuser());
@@ -103,7 +104,7 @@ void ISSnoopDevice (XMLEle *root)
 FpgaFocuser::FpgaFocuser()
 {
 	setVersion(VERSION_MAJOR,VERSION_MINOR);
-	FI::SetCapability(FOCUSER_CAN_ABS_MOVE | FOCUSER_CAN_REL_MOVE | FOCUSER_CAN_REVERSE); // | FOCUSER_CAN_ABORT);
+	FI::SetCapability(FOCUSER_CAN_ABS_MOVE | FOCUSER_CAN_REL_MOVE | FOCUSER_CAN_REVERSE | FOCUSER_CAN_ABORT | FOCUSER_CAN_SYNC);
 	Focuser::setSupportedConnections(CONNECTION_NONE);
 }
 
@@ -115,14 +116,16 @@ FpgaFocuser::~FpgaFocuser()
 
 bool FpgaFocuser::Connect()
 {
-  if (validateIpAddress(IPAddress[0].text))
+  const char * ip = IPAddress[0].text;
+  uint32_t port = 36000; 
+  if (!validateIpAddress(IPAddress[0].text))
   {
-			DEBUGF(INDI::Logger::DBG_ERROR, "Invalid IP address: %s", IPAddress[0].text);
+			DEBUGF(INDI::Logger::DBG_ERROR, "Invalid IP address: %si:%d", ip, port);
 			return false;
   }
 
   try {
-      koheron_interface = std::make_unique<indi_focuser_interface>(IPAddress[0].text, 36000);
+      koheron_interface = std::make_unique<indi_focuser_interface>(ip, port);
   }
   catch (const std::exception& e)
   {
@@ -130,8 +133,24 @@ bool FpgaFocuser::Connect()
           , IPAddress[0].text, e.what());
 			return false;
   }
-  updateStatus();
-  if (!hw_is_initialized) koheron_interface->Initialize();
+  updateStatusFunc();
+
+  if (!hw_is_initialized) 
+    koheron_interface->Initialize();
+	motorPeriodUs = 1000000.0 / koheron_interface->GetTimerInterruptFreq();
+	FocusStepPeriod[0].min = koheron_interface->get_minimum_period()*3*motorPeriodUs;
+	FocusStepPeriod[0].max = koheron_interface->get_maximum_period()*motorPeriodUs;
+	FocusBacklashN[1].min = FocusStepPeriod[0].min;
+	FocusBacklashN[1].max = FocusStepPeriod[0].max;
+	FocusMaxPosN[0].max = koheron_interface->GetGridPerRevolution();
+	FocusMaxPosN[0].min = FocusMaxPosN[0].max;
+	FocusMaxPosN[0].value = FocusMaxPosN[0].max;
+
+	FocusRelPosN[0].max = koheron_interface->GetGridPerRevolution()/100;
+
+	FocusAbsPosN[0].min = FocusSyncN[0].min = 0;
+	FocusAbsPosN[0].max = FocusSyncN[0].max = FocusMaxPosN[0].value;
+	FocusAbsPosN[0].step = (int) FocusAbsPosN[0].max / 1000;
 
   if (savePosition(-1) != -1)
   {
@@ -186,12 +205,12 @@ bool FpgaFocuser::initProperties()
 
 
 	// Step delay setting
-	IUFillNumber(&FocusStepPeriod[0], "FOCUS_STEPDELAY_VALUE", "milliseconds", "%0.0f", 1, 10, 1, 1);
+	IUFillNumber(&FocusStepPeriod[0], "FOCUS_STEPDELAY_VALUE", "microseconds", "%0.0f", 30, 19000, 1, 45);
 	IUFillNumberVector(&FocusStepPeriodP, FocusStepPeriod, 1, getDeviceName(), "FOCUS_STEPDELAY", "Step Delay", OPTIONS_TAB, IP_RW, 0, IPS_IDLE);
 
 	// Backlash setting
-	IUFillNumber(&FocusBacklashN[0], "FOCUS_BACKLASH_VALUE", "steps", "%0.0f", 0, 1000, 10, 0);
-	IUFillNumber(&FocusBacklashN[1], "FOCUS_BACKLASH_PERIOD_VALUE", "steps in 20ns", "%0.0f", 0, 1000, 10, 0);
+	IUFillNumber(&FocusBacklashN[0], "FOCUS_BACKLASH_VALUE", "steps", "%0.0f", 0, 10000, 1, 150);
+	IUFillNumber(&FocusBacklashN[1], "FOCUS_BACKLASH_PERIOD_VALUE", "microseconds", "%0.0f", 15, 19000, 1, 45);
 	IUFillNumberVector(&FocusBacklashNP, FocusBacklashN, 2, getDeviceName(), "FOCUS_BACKLASH", "Backlash", OPTIONS_TAB, IP_RW, 0, IPS_IDLE);
 
 	// Reset absolute possition
@@ -200,7 +219,8 @@ bool FpgaFocuser::initProperties()
 
 	// Koheron IP address
 	IUFillText(&IPAddress[0], "KOHERON_SERVER_ADDRESS", "Sever Address", "127.0.0.1");
-	IUFillTextVector(&IPAddressP, IPAddress, 1, getDeviceName(), "KOHERON_SERVER_ADDRESS", "Server Address", OPTIONS_TAB,IP_RW, 0, IPS_IDLE);
+	IUFillTextVector(&IPAddressP, IPAddress, 1, getDeviceName(), "KOHERON_SERVER_ADDRESS", "Server Address", CONNECTION_TAB, IP_RW, 0, IPS_IDLE);
+  registerProperty(&IPAddressP, INDI_TEXT);
 
 	// Active telescope setting
 	IUFillText(&ActiveTelescopeT[0], "ACTIVE_TELESCOPE_NAME", "Telescope", "Telescope Simulator");
@@ -213,6 +233,11 @@ bool FpgaFocuser::initProperties()
 	// Focuser temperature
 	IUFillNumber(&FocusTemperatureN[0], "FOCUS_TEMPERATURE_VALUE", "°C", "%0.2f", -50, 50, 1, 0);
 	IUFillNumberVector(&FocusTemperatureNP, FocusTemperatureN, 1, getDeviceName(), "FOCUS_TEMPERATURE", "Temperature", MAIN_CONTROL_TAB, IP_RO, 0, IPS_IDLE);
+
+	// Compensate for backlash
+	IUFillSwitch(&BacklashCorrectionS[0], "Enable", "", ISS_OFF);
+	IUFillSwitch(&BacklashCorrectionS[1], "Disable", "", ISS_ON);
+	IUFillSwitchVector(&BacklashCorrectionSP, BacklashCorrectionS, 2, getDeviceName(), "BacklashCompensate", "Backlash Compensate", OPTIONS_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Temperature Coefficient
 	IUFillNumber(&TemperatureCoefN[0], "μm/m°C", "", "%.1f", 0, 50, 1, 0);
@@ -228,22 +253,20 @@ bool FpgaFocuser::initProperties()
 	IUFillNumber(&ScopeParametersN[1], "TELESCOPE_FOCAL_LENGTH", "Focal Length (mm)", "%g", 10, 10000, 0, 0.0);
 	IUFillNumberVector(&ScopeParametersNP, ScopeParametersN, 2, ActiveTelescopeT[0].text, "TELESCOPE_INFO", "Scope Properties", OPTIONS_TAB, IP_RW, 60, IPS_OK);
 
-	FocusStepPeriod[0].min = koheron_interface->get_minimum_period();
-	FocusStepPeriod[0].max = koheron_interface->get_maximum_period();
-	FocusMaxPosN[0].min = 0;
-	FocusMaxPosN[0].max = koheron_interface->GetGridPerRevolution()*10;
+	// initial values at resolution 1/1
+	FocusMaxPosN[0].min = 1000;
+	FocusMaxPosN[0].max = 100000;
 	FocusMaxPosN[0].step = 1000;
-	FocusMaxPosN[0].value = FocusMaxPosN[0].max/10;
+	FocusMaxPosN[0].value = 10000;
 
 	FocusRelPosN[0].min = 0;
-	FocusRelPosN[0].max = koheron_interface->GetGridPerRevolution()/1000;
+	FocusRelPosN[0].max = 1000;
 	FocusRelPosN[0].step = 100;
 	FocusRelPosN[0].value = 100;
 
 	FocusAbsPosN[0].min = 0;
 	FocusAbsPosN[0].max = FocusMaxPosN[0].value;
 	FocusAbsPosN[0].step = (int) FocusAbsPosN[0].max / 100;
-	FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
 
 	FocusMotionS[FOCUS_OUTWARD].s = ISS_ON;
 	FocusMotionS[FOCUS_INWARD].s = ISS_OFF;
@@ -270,6 +293,7 @@ bool FpgaFocuser::updateProperties()
 
 	if (isConnected())
 	{
+		defineText(&IPAddressP);
 		defineText(&ActiveTelescopeTP);
 		defineNumber(&FocuserTravelNP);
 		defineSwitch(&FocusMotionSP);
@@ -285,6 +309,7 @@ bool FpgaFocuser::updateProperties()
 			defineNumber(&FocusTemperatureNP);
 			defineNumber(&TemperatureCoefNP);
 			defineSwitch(&TemperatureCompensateSP);
+			defineSwitch(&BacklashCorrectionSP);
 			readtemp(); // update immediately
 			lastTemperature = FocusTemperatureN[0].value; // init last temperature
 			IERmTimer(updateTemperatureID);
@@ -294,6 +319,7 @@ bool FpgaFocuser::updateProperties()
 		}
 
 	} else {
+		deleteProperty(IPAddressP.name);
 		deleteProperty(ActiveTelescopeTP.name);
 		deleteProperty(FocuserTravelNP.name);
 		deleteProperty(FocusMotionSP.name);
@@ -304,6 +330,7 @@ bool FpgaFocuser::updateProperties()
 		deleteProperty(FocusTemperatureNP.name);
 		deleteProperty(TemperatureCoefNP.name);
 		deleteProperty(TemperatureCompensateSP.name);
+		deleteProperty(BacklashCorrectionSP.name);
 	}
 
 	return true;
@@ -335,9 +362,6 @@ bool FpgaFocuser::ISNewNumber(const char *dev, const char *name, double values[]
 
             if (MoveAbsFocuser(newPos) == IPS_OK)
             {
-                IUUpdateNumber(&FocusAbsPosNP, values, names, n);
-                FocusAbsPosNP.s = IPS_OK;
-                IDSetNumber(&FocusAbsPosNP, nullptr);
                 return true;
             }
             else
@@ -349,16 +373,17 @@ bool FpgaFocuser::ISNewNumber(const char *dev, const char *name, double values[]
         // handle focus relative position
         if (!strcmp(name, FocusRelPosNP.name))
         {
+            if (hw_is_running) return false;
             IUUpdateNumber(&FocusRelPosNP, values, names, n);
             IDSetNumber(&FocusRelPosNP, nullptr);
 
             //FOCUS_INWARD
             if (FocusMotionS[0].s == ISS_ON)
-                FocusRelPosNP.s = MoveRelFocuser(FOCUS_INWARD, FocusRelPosN[0].value);
+                FocusRelPosNP.s = MoveRelFocuser(reverse_direction ? FOCUS_OUTWARD : FOCUS_INWARD, FocusRelPosN[0].value);
 
             //FOCUS_OUTWARD
             if (FocusMotionS[1].s == ISS_ON)
-                FocusRelPosNP.s = MoveRelFocuser(FOCUS_OUTWARD, FocusRelPosN[0].value);
+                FocusRelPosNP.s = MoveRelFocuser(reverse_direction ? FOCUS_INWARD : FOCUS_OUTWARD, FocusRelPosN[0].value);
 
             return true;
         }
@@ -371,7 +396,7 @@ bool FpgaFocuser::ISNewNumber(const char *dev, const char *name, double values[]
             IDSetNumber(&FocusBacklashNP, nullptr);
             FocusBacklashNP.s = IPS_OK;
             IDSetNumber(&FocusBacklashNP, nullptr);
-            DEBUGF(INDI::Logger::DBG_SESSION, "Backlash set to %0.0f steps and a period of %0.0f.", FocusBacklashN[0].value, FocusBacklashN[1].value);
+            DEBUGF(INDI::Logger::DBG_SESSION, "Backlash set to %0.0f steps and a period of %0.0f us.", FocusBacklashN[0].value, FocusBacklashN[1].value);
             return true;
         }
 
@@ -383,7 +408,7 @@ bool FpgaFocuser::ISNewNumber(const char *dev, const char *name, double values[]
             IDSetNumber(&FocusStepPeriodP, nullptr);
             FocusStepPeriodP.s = IPS_OK;
             IDSetNumber(&FocusStepPeriodP, nullptr);
-            DEBUGF(INDI::Logger::DBG_SESSION, "Step delay set to %0.0f ms.", FocusStepPeriod[0].value);
+            DEBUGF(INDI::Logger::DBG_SESSION, "Step delay set to %0.0f us.", FocusStepPeriod[0].value);
             return true;
         }
 
@@ -463,6 +488,40 @@ bool FpgaFocuser::ISNewSwitch(const char *dev, const char *name, ISState *states
             return true;
         }
 
+        // handle backlash compensation
+        if (!strcmp(name, BacklashCorrectionSP.name))
+        {
+            IUUpdateSwitch(&BacklashCorrectionSP, states, names, n);
+
+            if (BacklashCorrectionS[0].s == ISS_ON)
+            {
+                if (!isConnected()){
+                  DEBUG(INDI::Logger::DBG_WARNING, "Device not connected to.");
+                  return false;
+                }
+                FocusBacklashNP.s = IPS_BUSY;
+                koheron_interface->set_backlash_period(FocusBacklashN[1].value/motorPeriodUs);
+                koheron_interface->set_backlash_cycles(FocusBacklashN[0].value);
+                koheron_interface->enable_backlash(true);
+                BacklashCorrectionSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Hardware backlash compensation ENABLED.");
+            }
+
+            if (BacklashCorrectionS[1].s == ISS_ON)
+            {
+                if (!isConnected()){
+                  DEBUG(INDI::Logger::DBG_WARNING, "Device not connected to.");
+                  return false;
+                }
+                koheron_interface->enable_backlash(false);
+                FocusBacklashNP.s = IPS_IDLE;
+                BacklashCorrectionSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Hardware backlash compensation DISABLED.");
+            }
+
+            IDSetSwitch(&BacklashCorrectionSP, nullptr);
+            return true;
+        }
         // handle temperature compensation
         if (!strcmp(name, TemperatureCompensateSP.name))
         {
@@ -505,7 +564,7 @@ bool FpgaFocuser::ISNewText (const char *dev, const char *name, char *texts[], c
 				IDSetText(&IPAddressP, nullptr);
 				IPAddressP.s=IPS_OK;
 				IDSetText(&IPAddressP, nullptr);
-				DEBUGF(INDI::Logger::DBG_SESSION, "Active telescope set to %s.", ActiveTelescopeT[0].text);
+				DEBUGF(INDI::Logger::DBG_SESSION, "IP Address set to %s.", IPAddress[0].text);
 				return true;
 		}
 		// handle active devices
@@ -542,12 +601,14 @@ bool FpgaFocuser::saveConfigItems(FILE *fp)
 {
 	IUSaveConfigSwitch(fp, &FocusReverseSP);
 	IUSaveConfigSwitch(fp, &TemperatureCompensateSP);
+	IUSaveConfigSwitch(fp, &BacklashCorrectionSP);
 	IUSaveConfigNumber(fp, &FocusMaxPosNP);
 	IUSaveConfigNumber(fp, &FocusStepPeriodP);
 	IUSaveConfigNumber(fp, &FocusBacklashNP);
 	IUSaveConfigNumber(fp, &FocuserTravelNP);
 	IUSaveConfigNumber(fp, &PresetNP);
 	IUSaveConfigNumber(fp, &TemperatureCoefNP);
+	IUSaveConfigText(fp, &IPAddressP);
 	IUSaveConfigText(fp, &ActiveTelescopeTP);
 	return true;
 }
@@ -556,25 +617,39 @@ void FpgaFocuser::TimerHit()
 {
 }
 
+bool FpgaFocuser::SyncFocuser( uint32_t ticks )
+{
+  if ( !isConnected() ) return false;
+
+	koheron_interface->SetFocuserPosition(ticks);
+  updateStatusFunc();
+	DEBUGF(INDI::Logger::DBG_SESSION, "Focuser synced to %d.", ticks);
+  return true;
+}
+
 bool FpgaFocuser::AbortFocuser()
 {
+  if ( !isConnected() ) return false;
 	koheron_interface->StopFocuser(false);
 	DEBUG(INDI::Logger::DBG_SESSION, "Focuser motion aborted.");
+  updateStatusFunc();
 	return true;
 }
 
 IPState FpgaFocuser::MoveRelFocuser(FocusDirection dir, int ticks)
 {
-	if (FocusRelPosNP.s == IPS_BUSY || FocusAbsPosNP.s == IPS_BUSY)
+  updateStatusFunc();
+	if (hw_is_running)
 	{
 		DEBUG(INDI::Logger::DBG_WARNING, "Focusser still running from last time");
 		return IPS_ALERT;
 	}
-  if (!koheron_interface->FocuserIncrement(ticks, FocusStepPeriod[0].value, dir))
+  if (!koheron_interface->FocuserIncrement(ticks, FocusStepPeriod[0].value/motorPeriodUs, dir))
   {
 	  DEBUGF(INDI::Logger::DBG_SESSION, "%s: Failed to start focuser.", __func__);
 		return IPS_ALERT;
   }
+  updateStatusFunc();
 	lastTemperature = FocusTemperatureN[0].value; // register last temperature
 	DEBUGF(INDI::Logger::DBG_SESSION, "%s: Focuser motion started.", __func__);
   FocusRelPosNP.s = IPS_BUSY;
@@ -585,7 +660,8 @@ IPState FpgaFocuser::MoveRelFocuser(FocusDirection dir, int ticks)
 
 IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 {
-	if (FocusRelPosNP.s == IPS_BUSY || FocusAbsPosNP.s == IPS_BUSY)
+  updateStatusFunc();
+	if (hw_is_running)
 	{
 		DEBUG(INDI::Logger::DBG_WARNING, "Focusser still running from last time");
 		return IPS_ALERT;
@@ -602,13 +678,13 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 		return IPS_OK;
 	}
 
-
-  if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusStepPeriod[0].value, FocusAbsPosN[0].value < targetTicks))
+  bool dir = FocusAbsPosN[0].value < targetTicks;
+  if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusStepPeriod[0].value/motorPeriodUs, reverse_direction ? !dir : dir))
   {
 		DEBUGF(INDI::Logger::DBG_WARNING, "%s: Failed to start motion", __func__);
 		return IPS_ALERT;
   }
-  
+  updateStatusFunc();
 	// update abspos value and status
 	DEBUGF(INDI::Logger::DBG_SESSION, "%s: Focuser motion started.", __func__);
 
@@ -623,6 +699,7 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 
 bool FpgaFocuser::ReverseFocuser(bool enabled)
 {
+  reverse_direction = enabled;
 	if (enabled)
 	{
 		DEBUG(INDI::Logger::DBG_SESSION, "Reverse direction ENABLED.");
@@ -684,9 +761,9 @@ bool FpgaFocuser::readtemp()
 	IDSetNumber(&FocusTemperatureNP, nullptr);
 
 
-	float val = (float) koheron_interface->GetTemp(0);
+	float val = (float) koheron_interface->GetTemp_pi1w();
 
-  if (val > 100)
+  if (val > 100 || val < -99)
   {
 	  DEBUGF(INDI::Logger::DBG_ERROR, "Invalid value received %0.0f", val);
     return false;
@@ -757,40 +834,44 @@ void FpgaFocuser::temperatureCompensationHelper(void *context)
 	static_cast<FpgaFocuser*>(context)->temperatureCompensation();
 }
 
-void FpgaFocuser::updateStatus()
+void FpgaFocuser::updateStatusFunc()
 {
-	//if (!isConnected())
-	//	return;
   std::array<bool, 8> response = koheron_interface->GetFocuserAxisStatus();
   hw_is_initialized      = response[0];
   hw_is_running          = response[1];
   hw_direction = response[2];
-	
-  if (FocusRelPosNP.s == IPS_BUSY || FocusAbsPosNP.s == IPS_BUSY) 
-  {
-	  FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
+  detected_motion	= false;
+	FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
     if (!hw_is_running)
     {
 	    FocusRelPosNP.s = IPS_OK;
 	    IDSetNumber(&FocusRelPosNP, nullptr);
 	    FocusAbsPosNP.s = IPS_OK;
-	    IDSetNumber(&FocusAbsPosNP, nullptr);
 	    savePosition((int) FocusAbsPosN[0].value); 
+			if (detected_motion) DEBUG(INDI::Logger::DBG_SESSION, "Hardware motion stopped.");
+      detected_motion	= false;
     }
-  }
-  else if (FocusAbsPosNP.s == IPS_BUSY)
-  {
-	  FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
-  }
+    else
+    {
+      detected_motion	= true;
+	    FocusAbsPosNP.s = IPS_BUSY;
 
+    }
+  IDSetNumber(&FocusAbsPosNP, nullptr);
+}
+void FpgaFocuser::updateStatus()
+{
+	if (isConnected())
+  {
+    updateStatusFunc ();
+  }
 	updateStatusID = IEAddTimer(STATUS_UPDATE_TIMEOUT, updateStatusHelper, this);
 }
 void FpgaFocuser::updateTemperature()
 {
-	if (!isConnected())
-		return;
+	if (isConnected())
+	  readtemp();
 
-	readtemp();
 	updateTemperatureID = IEAddTimer(TEMPERATURE_UPDATE_TIMEOUT, updateTemperatureHelper, this);
 }
 
