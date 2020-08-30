@@ -197,6 +197,7 @@ bool FpgaFocuser::initProperties()
 {
 	INDI::Focuser::initProperties();
 
+  const char * TEMP_TAB = "Temperature Compensation";
 	// Backlash setting
 	IUFillNumber(&FocusBacklashPeriodN[0], "FOCUS_BACKLASH_PERIOD_VALUE", "period (microseconds)", "%0.0f", 15, 19000, 1, 45);
 	IUFillNumberVector(&FocusBacklashPeriodNP, FocusBacklashPeriodN, 1, getDeviceName(), "FOCUS_BACKLASH", "Backlash Period", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
@@ -204,7 +205,7 @@ bool FpgaFocuser::initProperties()
 	IUFillNumber(&FocuserInfoN[0], "CFZ_STEP_ACT", "Step Size (μm)", "%0.2f", 0, 1000, 1, 0);
 	IUFillNumber(&FocuserInfoN[1], "CFZ", "Critical Focus Zone (μm)", "%0.2f", 0, 1000, 1, 0);
 	IUFillNumber(&FocuserInfoN[2], "STEPS_PER_CFZ", "Steps / Critical Focus Zone", "%0.0f", 0, 1000, 1, 0);
-	IUFillNumberVector(&FocuserInfoNP, FocuserInfoN, 3, getDeviceName(), "FOCUSER_PARAMETERS", "Focuser Info", OPTIONS_TAB, IP_RO, 0, IPS_IDLE);
+	IUFillNumberVector(&FocuserInfoNP, FocuserInfoN, 3, getDeviceName(), "FOCUSER_PARAMETERS", "Focuser Info", TEMP_TAB, IP_RO, 0, IPS_IDLE);
 
 
 	// Reset absolute possition
@@ -214,35 +215,38 @@ bool FpgaFocuser::initProperties()
 
 	// Active telescope setting
 	IUFillText(&ActiveTelescopeT[0], "ACTIVE_TELESCOPE_NAME", "Telescope", "Telescope Simulator");
-	IUFillTextVector(&ActiveTelescopeTP, ActiveTelescopeT, 1, getDeviceName(), "ACTIVE_TELESCOPE", "Snoop devices", OPTIONS_TAB,IP_RW, 0, IPS_IDLE);
+	IUFillTextVector(&ActiveTelescopeTP, ActiveTelescopeT, 1, getDeviceName(), "ACTIVE_TELESCOPE", "Snoop devices", TEMP_TAB,IP_RW, 0, IPS_IDLE);
 
 	// Maximum focuser travel
 	IUFillNumber(&FocuserTravelN[0], "FOCUSER_TRAVEL_VALUE", "mm", "%0.0f", 10, 200, 10, 10);
-	IUFillNumberVector(&FocuserTravelNP, FocuserTravelN, 1, getDeviceName(), "FOCUSER_TRAVEL", "Max Travel", OPTIONS_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumberVector(&FocuserTravelNP, FocuserTravelN, 1, getDeviceName(), "FOCUSER_TRAVEL", "Max Travel", TEMP_TAB, IP_RW, 0, IPS_IDLE);
+
+	// Snooping params
+	IUFillNumber(&ScopeParametersN[0], "TELESCOPE_APERTURE", "Aperture (mm)", "%g", 10, 5000, 0, 0.0);
+	IUFillNumber(&ScopeParametersN[1], "TELESCOPE_FOCAL_LENGTH", "Focal Length (mm)", "%g", 10, 10000, 0, 0.0);
+	IUFillNumberVector(&ScopeParametersNP, ScopeParametersN, 2, ActiveTelescopeT[0].text, "TELESCOPE_INFO", "Scope Properties", TEMP_TAB, IP_RW, 60, IPS_OK);
 
 	// Focuser temperature
 	IUFillNumber(&FocusTemperatureN[0], "FOCUS_TEMPERATURE_VALUE", "°C", "%0.2f", -50, 50, 1, 0);
 	IUFillNumberVector(&FocusTemperatureNP, FocusTemperatureN, 1, getDeviceName(), "FOCUS_TEMPERATURE", "Temperature", MAIN_CONTROL_TAB, IP_RO, 0, IPS_IDLE);
+	// Focuser temperature
+	IUFillNumber(&FocusTemperatureN[0], "FOCUS_TEMPERATURE_VALUE", "°C", "%0.2f", -50, 50, 1, 0);
+	IUFillNumberVector(&FocusTemperatureNP, FocusTemperatureN, 1, getDeviceName(), "FOCUS_TEMPERATURE", "Temperature", TEMP_TAB, IP_RO, 0, IPS_IDLE);
 
 	// Temperature Coefficient
 	IUFillNumber(&TemperatureCoefN[0], "μm/m°C", "", "%.1f", 0, 50, 1, 0);
-	IUFillNumberVector(&TemperatureCoefNP, TemperatureCoefN, 1, getDeviceName(), "Temperature Coefficient", "", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumberVector(&TemperatureCoefNP, TemperatureCoefN, 1, getDeviceName(), "Temperature Coefficient", "", TEMP_TAB, IP_RW, 0, IPS_IDLE);
 
 	// Compensate for temperature
 	IUFillSwitch(&TemperatureCompensateS[0], "Enable", "", ISS_OFF);
 	IUFillSwitch(&TemperatureCompensateS[1], "Disable", "", ISS_ON);
-	IUFillSwitchVector(&TemperatureCompensateSP, TemperatureCompensateS, 2, getDeviceName(), "Temperature Compensate", "", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+	IUFillSwitchVector(&TemperatureCompensateSP, TemperatureCompensateS, 2, getDeviceName(), "Temperature Compensate", "", TEMP_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Source for temperature
 	IUFillSwitch(&TemperatureSensorS[0], "Pi-1wire (DS18B20)", "", ISS_ON);
 	IUFillSwitch(&TemperatureSensorS[1], "FPGA (analogue pin 14)", "", ISS_OFF);
 	IUFillSwitch(&TemperatureSensorS[2], "FPGA (analogue pin 15)", "", ISS_OFF);
-	IUFillSwitchVector(&TemperatureSensorSP, TemperatureSensorS, 3, getDeviceName(), "Temperature Sensor", "", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
-
-	// Snooping params
-	IUFillNumber(&ScopeParametersN[0], "TELESCOPE_APERTURE", "Aperture (mm)", "%g", 10, 5000, 0, 0.0);
-	IUFillNumber(&ScopeParametersN[1], "TELESCOPE_FOCAL_LENGTH", "Focal Length (mm)", "%g", 10, 10000, 0, 0.0);
-	IUFillNumberVector(&ScopeParametersNP, ScopeParametersN, 2, ActiveTelescopeT[0].text, "TELESCOPE_INFO", "Scope Properties", OPTIONS_TAB, IP_RW, 60, IPS_OK);
+	IUFillSwitchVector(&TemperatureSensorSP, TemperatureSensorS, 3, getDeviceName(), "Temperature Sensor", "", TEMP_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// initial values at resolution 1/1
 	FocusMaxPosN[0].min = 1000;
