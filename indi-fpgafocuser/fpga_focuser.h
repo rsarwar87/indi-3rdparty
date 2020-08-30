@@ -47,6 +47,9 @@ protected:
 	virtual bool saveConfigItems(FILE *fp);
 	virtual bool ReverseFocuser(bool enabled);
 	virtual bool AbortFocuser();
+  virtual bool SetFocuserBacklash(int32_t steps);
+  virtual bool SetFocuserBacklashEnabled(bool enabled);
+  virtual bool SetFocuserSpeed(int speed);
 	virtual void TimerHit();
 private:
 	virtual bool Connect();
@@ -54,16 +57,12 @@ private:
 	virtual int savePosition(int pos);
 	virtual bool readtemp();
 
-	INumber FocusStepPeriod[1];
-	INumberVectorProperty FocusStepPeriodP;
 	IText IPAddress[1];
 	ITextVectorProperty IPAddressP;
 	IText ActiveTelescopeT[1];
 	ITextVectorProperty ActiveTelescopeTP;
 	ISwitchVectorProperty MotorBoardSP;
 
-	ISwitch BacklashCorrectionS[2];
-	ISwitchVectorProperty BacklashCorrectionSP;
 	ISwitch ResetAbsPosS[1];
 	ISwitchVectorProperty ResetAbsPosSP;
 	ISwitch TemperatureCompensateS[2];
@@ -71,7 +70,7 @@ private:
 
 	INumber FocuserInfoN[3];
 	INumberVectorProperty FocuserInfoNP;
-	INumber FocusBacklashN[2];
+	INumber FocusBacklashPeriodN[1];
 	INumberVectorProperty FocusBacklashNP;
 	INumber FocuserTravelN[1];
 	INumberVectorProperty FocuserTravelNP;

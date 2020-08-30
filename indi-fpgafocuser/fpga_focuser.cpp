@@ -139,11 +139,12 @@ bool FpgaFocuser::Connect()
   if (!hw_is_initialized) 
     koheron_interface->Initialize();
 	motorPeriodUs = 1000000.0 / koheron_interface->GetTimerInterruptFreq();
-	FocusStepPeriod[0].min = koheron_interface->get_minimum_period()*3*motorPeriodUs;
-	FocusStepPeriod[0].max = koheron_interface->get_maximum_period()*motorPeriodUs;
-	FocusBacklashN[1].min = FocusStepPeriod[0].min;
-	FocusBacklashN[1].max = FocusStepPeriod[0].max;
+	FocusSpeedN[0].min = koheron_interface->get_minimum_period()*3*motorPeriodUs;
+	FocusSpeedN[0].max = koheron_interface->get_maximum_period()*motorPeriodUs;
+	FocusBacklashPeriodN[0].min = FocusSpeedN[0].min;
+	FocusBacklashPeriodN[0].max = FocusSpeedN[0].max;
 	FocusMaxPosN[0].max = koheron_interface->GetGridPerRevolution();
+	FocusBacklashN[0].max = FocusMaxPosN[0].max;
 	FocusMaxPosN[0].min = FocusMaxPosN[0].max;
 	FocusMaxPosN[0].value = FocusMaxPosN[0].max;
 
@@ -198,21 +199,16 @@ bool FpgaFocuser::initProperties()
 {
 	INDI::Focuser::initProperties();
 
+
+	// Backlash setting
+	IUFillNumber(&FocusBacklashPeriodN[0], "FOCUS_BACKLASH_PERIOD_VALUE", "microseconds", "%0.0f", 15, 19000, 1, 45);
+	IUFillNumberVector(&FocusBacklashNP, FocusBacklashPeriodN, 1, getDeviceName(), "FOCUS_BACKLASH", "Backlash", MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
 	// Focuser Info
 	IUFillNumber(&FocuserInfoN[0], "CFZ_STEP_ACT", "Step Size (μm)", "%0.2f", 0, 1000, 1, 0);
 	IUFillNumber(&FocuserInfoN[1], "CFZ", "Critical Focus Zone (μm)", "%0.2f", 0, 1000, 1, 0);
 	IUFillNumber(&FocuserInfoN[2], "STEPS_PER_CFZ", "Steps / Critical Focus Zone", "%0.0f", 0, 1000, 1, 0);
 	IUFillNumberVector(&FocuserInfoNP, FocuserInfoN, 3, getDeviceName(), "FOCUSER_PARAMETERS", "Focuser Info", MAIN_CONTROL_TAB, IP_RO, 0, IPS_IDLE);
 
-
-	// Step delay setting
-	IUFillNumber(&FocusStepPeriod[0], "FOCUS_STEPDELAY_VALUE", "microseconds", "%0.0f", 30, 19000, 1, 45);
-	IUFillNumberVector(&FocusStepPeriodP, FocusStepPeriod, 1, getDeviceName(), "FOCUS_STEPDELAY", "Step Delay", OPTIONS_TAB, IP_RW, 0, IPS_IDLE);
-
-	// Backlash setting
-	IUFillNumber(&FocusBacklashN[0], "FOCUS_BACKLASH_VALUE", "steps", "%0.0f", 0, 10000, 1, 150);
-	IUFillNumber(&FocusBacklashN[1], "FOCUS_BACKLASH_PERIOD_VALUE", "microseconds", "%0.0f", 15, 19000, 1, 45);
-	IUFillNumberVector(&FocusBacklashNP, FocusBacklashN, 2, getDeviceName(), "FOCUS_BACKLASH", "Backlash", OPTIONS_TAB, IP_RW, 0, IPS_IDLE);
 
 	// Reset absolute possition
 	IUFillSwitch(&ResetAbsPosS[0],"RESET_ABS","Purge",ISS_OFF);
@@ -234,11 +230,6 @@ bool FpgaFocuser::initProperties()
 	// Focuser temperature
 	IUFillNumber(&FocusTemperatureN[0], "FOCUS_TEMPERATURE_VALUE", "°C", "%0.2f", -50, 50, 1, 0);
 	IUFillNumberVector(&FocusTemperatureNP, FocusTemperatureN, 1, getDeviceName(), "FOCUS_TEMPERATURE", "Temperature", MAIN_CONTROL_TAB, IP_RO, 0, IPS_IDLE);
-
-	// Compensate for backlash
-	IUFillSwitch(&BacklashCorrectionS[0], "Enable", "", ISS_OFF);
-	IUFillSwitch(&BacklashCorrectionS[1], "Disable", "", ISS_ON);
-	IUFillSwitchVector(&BacklashCorrectionSP, BacklashCorrectionS, 2, getDeviceName(), "BacklashCompensate", "Backlash Compensate", OPTIONS_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Temperature Coefficient
 	IUFillNumber(&TemperatureCoefN[0], "μm/m°C", "", "%.1f", 0, 50, 1, 0);
@@ -299,7 +290,6 @@ bool FpgaFocuser::updateProperties()
 		defineNumber(&FocuserTravelNP);
 		defineSwitch(&FocusMotionSP);
 		defineNumber(&FocuserInfoNP);
-		defineNumber(&FocusStepPeriodP);
 		defineNumber(&FocusBacklashNP);
 		defineSwitch(&ResetAbsPosSP);
 
@@ -310,7 +300,6 @@ bool FpgaFocuser::updateProperties()
 			defineNumber(&FocusTemperatureNP);
 			defineNumber(&TemperatureCoefNP);
 			defineSwitch(&TemperatureCompensateSP);
-			defineSwitch(&BacklashCorrectionSP);
 			readtemp(); // update immediately
 			lastTemperature = FocusTemperatureN[0].value; // init last temperature
 			IERmTimer(updateTemperatureID);
@@ -325,13 +314,11 @@ bool FpgaFocuser::updateProperties()
 		deleteProperty(FocuserTravelNP.name);
 		deleteProperty(FocusMotionSP.name);
 		deleteProperty(FocuserInfoNP.name);
-		deleteProperty(FocusStepPeriodP.name);
 		deleteProperty(FocusBacklashNP.name);
 		deleteProperty(ResetAbsPosSP.name);
 		deleteProperty(FocusTemperatureNP.name);
 		deleteProperty(TemperatureCoefNP.name);
 		deleteProperty(TemperatureCompensateSP.name);
-		deleteProperty(BacklashCorrectionSP.name);
 	}
 
 	return true;
@@ -395,21 +382,14 @@ bool FpgaFocuser::ISNewNumber(const char *dev, const char *name, double values[]
             IUUpdateNumber(&FocusBacklashNP, values, names, n);
             FocusBacklashNP.s = IPS_BUSY;
             IDSetNumber(&FocusBacklashNP, nullptr);
+	          if (!koheron_interface->set_backlash_period(FocusBacklashPeriodN[0].value/motorPeriodUs)) {
+	            DEBUG(INDI::Logger::DBG_WARNING, "Failed to set backlash period.");
+              return false;
+            }
+
             FocusBacklashNP.s = IPS_OK;
             IDSetNumber(&FocusBacklashNP, nullptr);
-            DEBUGF(INDI::Logger::DBG_SESSION, "Backlash set to %0.0f steps and a period of %0.0f us.", FocusBacklashN[0].value, FocusBacklashN[1].value);
-            return true;
-        }
-
-        // handle focus step delay
-        if (!strcmp(name, FocusStepPeriodP.name))
-        {
-            IUUpdateNumber(&FocusStepPeriodP, values, names, n);
-            FocusStepPeriodP.s = IPS_BUSY;
-            IDSetNumber(&FocusStepPeriodP, nullptr);
-            FocusStepPeriodP.s = IPS_OK;
-            IDSetNumber(&FocusStepPeriodP, nullptr);
-            DEBUGF(INDI::Logger::DBG_SESSION, "Step delay set to %0.0f us.", FocusStepPeriod[0].value);
+            DEBUGF(INDI::Logger::DBG_SESSION, "Backlash set to %0.0f steps and a period of %0.0f us.", FocusBacklashN[0].value, FocusBacklashPeriodN[0].value);
             return true;
         }
 
@@ -478,7 +458,7 @@ bool FpgaFocuser::ISNewSwitch(const char *dev, const char *name, ISState *states
             IUResetSwitch(&ResetAbsPosSP);
 
             //set absolute position to zero and save to file
-            FocusAbsPosN[0].value = koheron_interface->GetFocuserHomePosition();
+            MoveAbsFocuser(koheron_interface->GetFocuserHomePosition());
             IDSetNumber(&FocusAbsPosNP, nullptr);
             savePosition(0);
 
@@ -486,41 +466,6 @@ bool FpgaFocuser::ISNewSwitch(const char *dev, const char *name, ISState *states
 
             ResetAbsPosSP.s = IPS_IDLE;
             IDSetSwitch(&ResetAbsPosSP, nullptr);
-            return true;
-        }
-
-        // handle backlash compensation
-        if (!strcmp(name, BacklashCorrectionSP.name))
-        {
-            IUUpdateSwitch(&BacklashCorrectionSP, states, names, n);
-
-            if (BacklashCorrectionS[0].s == ISS_ON)
-            {
-                if (!isConnected()){
-                  DEBUG(INDI::Logger::DBG_WARNING, "Device not connected to.");
-                  return false;
-                }
-                FocusBacklashNP.s = IPS_BUSY;
-                koheron_interface->set_backlash_period(FocusBacklashN[1].value/motorPeriodUs);
-                koheron_interface->set_backlash_cycles(FocusBacklashN[0].value);
-                koheron_interface->enable_backlash(true);
-                BacklashCorrectionSP.s = IPS_OK;
-                DEBUG(INDI::Logger::DBG_SESSION, "Hardware backlash compensation ENABLED.");
-            }
-
-            if (BacklashCorrectionS[1].s == ISS_ON)
-            {
-                if (!isConnected()){
-                  DEBUG(INDI::Logger::DBG_WARNING, "Device not connected to.");
-                  return false;
-                }
-                koheron_interface->enable_backlash(false);
-                FocusBacklashNP.s = IPS_IDLE;
-                BacklashCorrectionSP.s = IPS_IDLE;
-                DEBUG(INDI::Logger::DBG_SESSION, "Hardware backlash compensation DISABLED.");
-            }
-
-            IDSetSwitch(&BacklashCorrectionSP, nullptr);
             return true;
         }
         // handle temperature compensation
@@ -602,9 +547,7 @@ bool FpgaFocuser::saveConfigItems(FILE *fp)
 {
 	IUSaveConfigSwitch(fp, &FocusReverseSP);
 	IUSaveConfigSwitch(fp, &TemperatureCompensateSP);
-	IUSaveConfigSwitch(fp, &BacklashCorrectionSP);
 	IUSaveConfigNumber(fp, &FocusMaxPosNP);
-	IUSaveConfigNumber(fp, &FocusStepPeriodP);
 	IUSaveConfigNumber(fp, &FocusBacklashNP);
 	IUSaveConfigNumber(fp, &FocuserTravelNP);
 	IUSaveConfigNumber(fp, &PresetNP);
@@ -628,6 +571,35 @@ bool FpgaFocuser::SyncFocuser( uint32_t ticks )
   return true;
 }
 
+bool FpgaFocuser::SetFocuserBacklash(int32_t steps)
+{
+  if ( !isConnected() ) return false;
+	if (!koheron_interface->set_backlash_cycles(steps)){
+	  DEBUG(INDI::Logger::DBG_WARNING, "Failed to set backlash steps.");
+    return false;
+  }
+  DEBUGF(INDI::Logger::DBG_SESSION, "Backlash set to %0.0f steps", FocusBacklashN[0].value);
+	return true;
+}
+
+bool FpgaFocuser::SetFocuserBacklashEnabled(bool enabled)
+{
+  if ( !isConnected() ) return false;
+	if (!koheron_interface->enable_backlash(enabled)) {
+	  DEBUG(INDI::Logger::DBG_WARNING, "Failed to toggle backlash.");
+    return false;
+  }
+	DEBUG(INDI::Logger::DBG_SESSION, "Focuser backlash toggled.");
+	return true;
+}
+
+bool FpgaFocuser::SetFocuserSpeed(int speed)
+{
+  if ( !isConnected() ) return false;
+	DEBUGF(INDI::Logger::DBG_SESSION, "Focuser speed set to: %d us", speed);
+	return true;
+}
+
 bool FpgaFocuser::AbortFocuser()
 {
   if ( !isConnected() ) return false;
@@ -645,7 +617,7 @@ IPState FpgaFocuser::MoveRelFocuser(FocusDirection dir, int ticks)
 		DEBUG(INDI::Logger::DBG_WARNING, "Focusser still running from last time");
 		return IPS_ALERT;
 	}
-  if (!koheron_interface->FocuserIncrement(ticks, FocusStepPeriod[0].value/motorPeriodUs, dir))
+  if (!koheron_interface->FocuserIncrement(ticks, FocusSpeedN[0].value/motorPeriodUs, dir))
   {
 	  DEBUGF(INDI::Logger::DBG_SESSION, "%s: Failed to start focuser.", __func__);
 		return IPS_ALERT;
@@ -680,7 +652,7 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 	}
 
   bool dir = FocusAbsPosN[0].value < targetTicks;
-  if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusStepPeriod[0].value/motorPeriodUs, reverse_direction ? !dir : dir))
+  if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusSpeedN[0].value/motorPeriodUs, reverse_direction ? !dir : dir))
   {
 		DEBUGF(INDI::Logger::DBG_WARNING, "%s: Failed to start motion", __func__);
 		return IPS_ALERT;
