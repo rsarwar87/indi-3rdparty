@@ -779,7 +779,7 @@ bool FpgaFocuser::readtemp()
 	// set OK
 	FocusTemperatureNP.s=IPS_OK;
 	IDSetNumber(&FocusTemperatureNP, nullptr);
-	DEBUGF(INDI::Logger::DBG_SESSION, "Temperature: %.2f°C", val);
+	DEBUGF(INDI::Logger::DBG_DEBUG, "Temperature: %.2f°C", val);
 
 	return true;
 }
