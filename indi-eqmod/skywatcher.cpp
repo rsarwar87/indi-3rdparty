@@ -2230,7 +2230,7 @@ void Skywatcher::SetBacklashDE(uint32_t backlash)
 {
     Backlash[Axis2] = backlash;
 #ifdef _KOHERON
-    if (!koheron_interface->cmd_set_backlash_cycles(Axis2, backlash / 10))
+    if (!koheron_interface->cmd_set_backlash_cycles(Axis2, backlash))
     {
         koheron_interface->print_error(__func__, "Failed cmd_set_backlash_cycles: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis2);
