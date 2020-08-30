@@ -535,8 +535,8 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     }
     strcpy(boardinfo[0], "CUSTOM");
 #ifdef _KOHERON
-    minperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) / 5;
-    minperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) / 5;
+    minperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) ;
+    minperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) ;
 #endif
 
     boardinfo[1] = (char *)malloc(5);
@@ -649,7 +649,7 @@ void Skywatcher::InquireRAEncoderInfo(INumberVectorProperty *encoderNP)
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetGridPerRevolution: Axis%u", __func__,
                          Axis1);
     }
-    RAStepsWorm = koheron_interface->SwpGetTimerInterruptFreq() / 5;
+    RAStepsWorm = koheron_interface->SwpGetTimerInterruptFreq() ;
     if (RAStepsWorm == 0xFFFFFFFF)
     {
         koheron_interface->print_error(__func__, " SwpGetTimerInterruptFreq failed: Axis");
@@ -699,7 +699,7 @@ void Skywatcher::InquireRAEncoderInfo(INumberVectorProperty *encoderNP)
         RAStepsWorm = 0xFC80;
     }
 
-    steppersvalues[1] = static_cast<double>(RAStepsWorm);
+    steppersvalues[1] = static_cast<double>(RAStepsWorm/5);
 
     steppersvalues[2] = static_cast<double>(RAHighspeedRatio);
     // should test this is ok
@@ -726,7 +726,7 @@ void Skywatcher::InquireDEEncoderInfo(INumberVectorProperty *encoderNP)
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to SwpGetGridPerRevolution: Axis%u", __func__,
                          Axis2);
     }
-    DEStepsWorm = koheron_interface->SwpGetTimerInterruptFreq() / 5;
+    DEStepsWorm = koheron_interface->SwpGetTimerInterruptFreq() ;
     if (DEStepsWorm == 0xFFFFFFFF)
     {
         koheron_interface->print_error(__func__, " SwpGetTimerInterruptFreq failed: Axis");
@@ -777,7 +777,7 @@ void Skywatcher::InquireDEEncoderInfo(INumberVectorProperty *encoderNP)
         DEStepsWorm = 0xFC80;
     }
 
-    steppersvalues[1] = static_cast<double>(DEStepsWorm);
+    steppersvalues[1] = static_cast<double>(DEStepsWorm/5);
 
     steppersvalues[2] = static_cast<double>(DEHighspeedRatio);
     // should test this is ok
@@ -1360,7 +1360,7 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisSt
           + std::to_string(minperiods[axis]));
         period = minperiods[axis];
     }
-    if (!koheron_interface->SwpSetStepPeriod(axis, currentstatus->slewmode == SLEW, period * 5))
+    if (!koheron_interface->SwpSetStepPeriod(axis, currentstatus->slewmode == SLEW, period ))
     {
         koheron_interface->print_error(__func__, " SwpSetStepPeriod: Axis");
         throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Pereiod: Axis%u", __func__, axis);
