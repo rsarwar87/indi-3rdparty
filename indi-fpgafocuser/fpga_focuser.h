@@ -71,7 +71,7 @@ private:
 	INumber FocuserInfoN[3];
 	INumberVectorProperty FocuserInfoNP;
 	INumber FocusBacklashPeriodN[1];
-	INumberVectorProperty FocusBacklashNP;
+	INumberVectorProperty FocusBacklashPeriodNP;
 	INumber FocuserTravelN[1];
 	INumberVectorProperty FocuserTravelNP;
 	INumber ScopeParametersN[2];
