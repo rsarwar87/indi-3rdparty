@@ -2201,50 +2201,47 @@ void Skywatcher::long2Revu24str(uint32_t n, char *str)
 // Park
 
 // Backlash
-void Skywatcher::SetBacklashRA(uint32_t backlash)
+void Skywatcher::SetBacklash(SkywatcherAxis axis, uint32_t backlash)
 {
-    Backlash[Axis1] = backlash;
+    Backlash[axis] = backlash;
 #ifdef _KOHERON
-    if (!koheron_interface->cmd_set_backlash_cycles(Axis1, backlash / 10))
+    if (!koheron_interface->cmd_set_backlash_cycles(axis, backlash))
     {
         koheron_interface->print_error(__func__, "Failed to cmd_set_backlash_cycles: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to cmd_set_backlash_cycles: Axis%u", __func__, Axis1);
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to cmd_set_backlash_cycles: Axis%u", __func__, axis);
     }
-    if (UseBacklash[Axis1])
-        SetBacklashUseRA(true);
+    if (UseBacklash[axis])
+        SetBacklashEnable(axis, true);
 #endif
+}
+
+void Skywatcher::SetBacklashEnable(SkywatcherAxis axis, bool usebacklash)
+{
+    UseBacklash[axis] = usebacklash;
+#ifdef _KOHERON
+    if (!koheron_interface->cmd_enable_backlash(axis, usebacklash))
+    {
+        koheron_interface->print_error(__func__, "Failed cmd_enable_backlashs: Axis");
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed cmd_enable_backlash: Axis%u", __func__, axis);
+    }
+#endif
+}
+
+void Skywatcher::SetBacklashRA(uint32_t backlash)
+{
+    SetBacklash(Axis1, backlash);
 }
 
 void Skywatcher::SetBacklashUseRA(bool usebacklash)
 {
-    UseBacklash[Axis1] = usebacklash;
-#ifdef _KOHERON
-    if (!koheron_interface->cmd_enable_backlash(Axis1, usebacklash))
-    {
-        koheron_interface->print_error(__func__, "Failed cmd_enable_backlashs: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed cmd_enable_backlash: Axis%u", __func__, Axis1);
-    }
-#endif
+    SetBacklashEnable(Axis1, usebacklash);
 }
 void Skywatcher::SetBacklashDE(uint32_t backlash)
 {
-    Backlash[Axis2] = backlash;
-#ifdef _KOHERON
-    if (!koheron_interface->cmd_set_backlash_cycles(Axis2, backlash))
-    {
-        koheron_interface->print_error(__func__, "Failed cmd_set_backlash_cycles: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis2);
-    }
-    if (UseBacklash[Axis2])
-        SetBacklashUseDE(true);
-#endif
+    SetBacklash(Axis2, backlash);
 }
 
 void Skywatcher::SetBacklashUseDE(bool usebacklash)
 {
-    UseBacklash[Axis2] = usebacklash;
-#ifdef _KOHERON
-    if (!koheron_interface->cmd_enable_backlash(Axis2, usebacklash))
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to stop motor: Axis%u", __func__, Axis2);
-#endif
+    SetBacklashEnable(Axis2, usebacklash);
 }

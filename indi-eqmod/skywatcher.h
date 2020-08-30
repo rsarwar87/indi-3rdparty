@@ -278,6 +278,8 @@ class Skywatcher
         void GetPPECStatus(SkywatcherAxis axis, bool *intraining, bool *inppec);
         void TurnSnapPort(SkywatcherAxis axis, bool on);
         void SlewTo(SkywatcherAxis axis, int32_t deltaencoder);
+        void SetBacklash(SkywatcherAxis axis, uint32_t backlash);
+        void SetBacklashEnable(SkywatcherAxis axis, bool usebacklash);
 
 #ifndef _KOHERON
         bool read_eqmod();
