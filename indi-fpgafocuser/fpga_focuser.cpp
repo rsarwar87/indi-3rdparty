@@ -103,7 +103,7 @@ FpgaFocuser::FpgaFocuser()
 	setVersion(VERSION_MAJOR,VERSION_MINOR);
 	FI::SetCapability(FOCUSER_CAN_ABS_MOVE | FOCUSER_CAN_REL_MOVE | FOCUSER_CAN_REVERSE | FOCUSER_CAN_ABORT 
       | FOCUSER_CAN_SYNC | FOCUSER_HAS_VARIABLE_SPEED | FOCUSER_HAS_BACKLASH);
-	Focuser::setSupportedConnections(CONNECTION_NONE);
+	Focuser::setSupportedConnections(CONNECTION_TCP);
 }
 
 FpgaFocuser::~FpgaFocuser()
@@ -114,9 +114,14 @@ FpgaFocuser::~FpgaFocuser()
 
 bool FpgaFocuser::Connect()
 {
-  const char * ip = IPAddress[0].text;
-  uint32_t port = 36000; 
-  if (!validateIpAddress(IPAddress[0].text))
+  const char * ip = tcpConnection->host();
+  if (ip == nullptr )
+  {
+      LOG_ERROR("Error! Server address is missing or invalid.");
+      return false;
+  }
+  uint32_t port = tcpConnection->port(); 
+  if (!validateIpAddress(ip))
   {
 			DEBUGF(INDI::Logger::DBG_ERROR, "Invalid IP address: %si:%d", ip, port);
 			return false;
@@ -127,8 +132,8 @@ bool FpgaFocuser::Connect()
   }
   catch (const std::exception& e)
   {
-			DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s: %s"
-          , IPAddress[0].text, e.what());
+			DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s:%d %s"
+          , ip, port, e.what());
 			return false;
   }
   updateStatusFunc();
@@ -162,8 +167,6 @@ bool FpgaFocuser::Connect()
   }
 
 	updateStatusID = IEAddTimer(STATUS_UPDATE_TIMEOUT, updateStatusHelper, this);
-	IPAddressP.s=IPS_BUSY;
-	IDSetText(&IPAddressP, nullptr);
 	// Update focuser parameters
 	getFocuserInfo();
 
@@ -180,8 +183,6 @@ bool FpgaFocuser::Disconnect()
 
 
 	// Unlock BCM Pins setting
-	IPAddressP.s=IPS_IDLE;
-	IDSetText(&IPAddressP, nullptr);
 
 	// Stop timers
 	IERmTimer(updateTemperatureID);
@@ -195,7 +196,6 @@ bool FpgaFocuser::Disconnect()
 bool FpgaFocuser::initProperties()
 {
 	INDI::Focuser::initProperties();
-
 
 	// Backlash setting
 	IUFillNumber(&FocusBacklashPeriodN[0], "FOCUS_BACKLASH_PERIOD_VALUE", "period (microseconds)", "%0.0f", 15, 19000, 1, 45);
@@ -211,10 +211,6 @@ bool FpgaFocuser::initProperties()
 	IUFillSwitch(&ResetAbsPosS[0],"RESET_ABS","GoToHome",ISS_OFF);
 	IUFillSwitchVector(&ResetAbsPosSP,ResetAbsPosS,1,getDeviceName(),"RESET_ABS_SW","Reset Position",MAIN_CONTROL_TAB,IP_RW,ISR_1OFMANY,0,IPS_IDLE);
 
-	// Koheron IP address
-	IUFillText(&IPAddress[0], "KOHERON_SERVER_ADDRESS", "Sever Address", "127.0.0.1");
-	IUFillTextVector(&IPAddressP, IPAddress, 1, getDeviceName(), "KOHERON_SERVER_ADDRESS", "Server Address", CONNECTION_TAB, IP_RW, 0, IPS_IDLE);
-  registerProperty(&IPAddressP, INDI_TEXT);
 
 	// Active telescope setting
 	IUFillText(&ActiveTelescopeT[0], "ACTIVE_TELESCOPE_NAME", "Telescope", "Telescope Simulator");
@@ -236,6 +232,12 @@ bool FpgaFocuser::initProperties()
 	IUFillSwitch(&TemperatureCompensateS[0], "Enable", "", ISS_OFF);
 	IUFillSwitch(&TemperatureCompensateS[1], "Disable", "", ISS_ON);
 	IUFillSwitchVector(&TemperatureCompensateSP, TemperatureCompensateS, 2, getDeviceName(), "Temperature Compensate", "", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+
+	// Source for temperature
+	IUFillSwitch(&TemperatureSensorS[0], "Pi-1wire (DS18B20)", "", ISS_ON);
+	IUFillSwitch(&TemperatureSensorS[1], "FPGA (analogue pin 14)", "", ISS_OFF);
+	IUFillSwitch(&TemperatureSensorS[2], "FPGA (analogue pin 15)", "", ISS_OFF);
+	IUFillSwitchVector(&TemperatureSensorSP, TemperatureSensorS, 3, getDeviceName(), "Temperature Sensor", "", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Snooping params
 	IUFillNumber(&ScopeParametersN[0], "TELESCOPE_APERTURE", "Aperture (mm)", "%g", 10, 5000, 0, 0.0);
@@ -282,7 +284,6 @@ bool FpgaFocuser::updateProperties()
 
 	if (isConnected())
 	{
-		defineText(&IPAddressP);
 		defineText(&ActiveTelescopeTP);
 		defineNumber(&FocuserTravelNP);
 		defineSwitch(&FocusMotionSP);
@@ -297,6 +298,7 @@ bool FpgaFocuser::updateProperties()
 			defineNumber(&FocusTemperatureNP);
 			defineNumber(&TemperatureCoefNP);
 			defineSwitch(&TemperatureCompensateSP);
+			defineSwitch(&TemperatureSensorSP);
 			readtemp(); // update immediately
 			lastTemperature = FocusTemperatureN[0].value; // init last temperature
 			IERmTimer(updateTemperatureID);
@@ -306,7 +308,6 @@ bool FpgaFocuser::updateProperties()
 		}
 
 	} else {
-		deleteProperty(IPAddressP.name);
 		deleteProperty(ActiveTelescopeTP.name);
 		deleteProperty(FocuserTravelNP.name);
 		deleteProperty(FocusMotionSP.name);
@@ -316,6 +317,7 @@ bool FpgaFocuser::updateProperties()
 		deleteProperty(FocusTemperatureNP.name);
 		deleteProperty(TemperatureCoefNP.name);
 		deleteProperty(TemperatureCompensateSP.name);
+		deleteProperty(TemperatureSensorSP.name);
 	}
 
 	return true;
@@ -466,6 +468,36 @@ bool FpgaFocuser::ISNewSwitch(const char *dev, const char *name, ISState *states
             return true;
         }
         // handle temperature compensation
+        if (!strcmp(name, TemperatureSensorSP.name))
+        {
+            IUUpdateSwitch(&TemperatureSensorSP, states, names, n);
+
+            if (TemperatureSensorS[0].s == ISS_ON)
+            {
+                if (!temperatureCompensationID)
+                    temperatureCompensationID =
+                        IEAddTimer(TEMPERATURE_COMPENSATION_TIMEOUT, temperatureCompensationHelper, this);
+                TemperatureSensorSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Temperature is sourced from DS18B20 connected to the RPi 1-wire pin");
+            }
+
+            if (TemperatureSensorS[1].s == ISS_ON)
+            {
+                IERmTimer(temperatureCompensationID);
+                TemperatureSensorSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Temperature is sourced from sensor connected to the FPGA analogue pin 14");
+            }
+            if (TemperatureSensorS[2].s == ISS_ON)
+            {
+                IERmTimer(temperatureCompensationID);
+                TemperatureSensorSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Temperature is sourced from sensor connected to the FPGA analogue pin 15");
+            }
+
+            IDSetSwitch(&TemperatureSensorSP, nullptr);
+            return true;
+        }
+        // handle temperature compensation
         if (!strcmp(name, TemperatureCompensateSP.name))
         {
             IUUpdateSwitch(&TemperatureCompensateSP, states, names, n);
@@ -500,17 +532,6 @@ bool FpgaFocuser::ISNewText (const char *dev, const char *name, char *texts[], c
 	if (!strcmp(dev, getDeviceName()))
 	{
 		// handle active devices
-		if (!strcmp(name, IPAddressP.name))
-		{
-				IUUpdateText(&IPAddressP,texts,names,n);
-				IPAddressP.s=IPS_BUSY;
-				IDSetText(&IPAddressP, nullptr);
-				IPAddressP.s=IPS_OK;
-				IDSetText(&IPAddressP, nullptr);
-				DEBUGF(INDI::Logger::DBG_SESSION, "IP Address set to %s.", IPAddress[0].text);
-				return true;
-		}
-		// handle active devices
 		if (!strcmp(name, ActiveTelescopeTP.name))
 		{
 				IUUpdateText(&ActiveTelescopeTP,texts,names,n);
@@ -542,14 +563,15 @@ bool FpgaFocuser::ISSnoopDevice (XMLEle *root)
 
 bool FpgaFocuser::saveConfigItems(FILE *fp)
 {
+  tcpConnection->saveConfigItems(fp);
 	IUSaveConfigSwitch(fp, &FocusReverseSP);
+	IUSaveConfigSwitch(fp, &TemperatureSensorSP);
 	IUSaveConfigSwitch(fp, &TemperatureCompensateSP);
 	IUSaveConfigNumber(fp, &FocusMaxPosNP);
 	IUSaveConfigNumber(fp, &FocusBacklashPeriodNP);
 	IUSaveConfigNumber(fp, &FocuserTravelNP);
 	IUSaveConfigNumber(fp, &PresetNP);
 	IUSaveConfigNumber(fp, &TemperatureCoefNP);
-	IUSaveConfigText(fp, &IPAddressP);
 	IUSaveConfigText(fp, &ActiveTelescopeTP);
   IUSaveConfigSwitch(fp, &FocusBacklashSP);
   IUSaveConfigNumber(fp, &FocusBacklashNP);
@@ -735,7 +757,17 @@ bool FpgaFocuser::readtemp()
 	IDSetNumber(&FocusTemperatureNP, nullptr);
 
 
-	float val = (float) koheron_interface->GetTemp_pi1w();
+	float val = 0;
+  
+  if (TemperatureSensorS[0].s == ISS_ON)
+    val = (float)koheron_interface->GetTemp_pi1w();
+  else if (TemperatureSensorS[1].s == ISS_ON)
+    val = (float)koheron_interface->GetTemp_fpga(20);
+  else
+    val = (float)koheron_interface->GetTemp_fpga(28);
+
+	FocusTemperatureNP.s=IPS_BUSY;
+	IDSetNumber(&FocusTemperatureNP, nullptr);
 
   if (val > 100 || val < -99)
   {
@@ -747,7 +779,7 @@ bool FpgaFocuser::readtemp()
 	// set OK
 	FocusTemperatureNP.s=IPS_OK;
 	IDSetNumber(&FocusTemperatureNP, nullptr);
-	DEBUGF(INDI::Logger::DBG_DEBUG, "Temperature: %.2f°C", val);
+	DEBUGF(INDI::Logger::DBG_SESSION, "Temperature: %.2f°C", val);
 
 	return true;
 }

@@ -57,8 +57,6 @@ private:
 	virtual int savePosition(int pos);
 	virtual bool readtemp();
 
-	IText IPAddress[1];
-	ITextVectorProperty IPAddressP;
 	IText ActiveTelescopeT[1];
 	ITextVectorProperty ActiveTelescopeTP;
 	ISwitchVectorProperty MotorBoardSP;
@@ -67,6 +65,8 @@ private:
 	ISwitchVectorProperty ResetAbsPosSP;
 	ISwitch TemperatureCompensateS[2];
 	ISwitchVectorProperty TemperatureCompensateSP;
+	ISwitch TemperatureSensorS[3];
+	ISwitchVectorProperty TemperatureSensorSP;
 
 	INumber FocuserInfoN[3];
 	INumberVectorProperty FocuserInfoNP;
