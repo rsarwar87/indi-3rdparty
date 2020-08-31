@@ -112,6 +112,36 @@ FpgaFocuser::~FpgaFocuser()
   koheron_interface.reset();
 }
 
+bool FpgaFocuser::SetFocuserMaxPosition(uint32_t value)
+{
+  if (FocusAbsPosN[0].value > value) 
+  {
+    koheron_interface->SetFocuserPosition(value);
+    updateStatusFunc();
+  }
+  if (!koheron_interface->SetGridPerRevolution(value))
+  {
+	  DEBUG(INDI::Logger::DBG_WARNING, "Failed to set max position.");
+    return false;
+  }
+	FocusMaxPosN[0].value = value;
+	//FocusMaxPosN[0].min = value;
+	//FocusMaxPosN[0].max = value;
+	FocusRelPosN[0].max = value/2;
+	FocusRelPosN[0].step = value/100;
+	FocusRelPosN[0].min = 0;
+	FocusBacklashN[0].max = value;
+	FocusAbsPosN[0].max = FocusSyncN[0].max = value;
+	FocusAbsPosN[0].min = FocusSyncN[0].min = 0;
+	FocusAbsPosN[0].step = FocusSyncN[0].step = value/100;
+  IUUpdateMinMax(&FocusAbsPosNP);
+  IUUpdateMinMax(&FocusRelPosNP);
+  IUUpdateMinMax(&FocusSyncNP);
+	getFocuserInfo();
+	DEBUGF(INDI::Logger::DBG_DEBUG, "Max position set to %d.", value);
+  return true;
+}
+
 bool FpgaFocuser::Connect()
 {
   const char * ip = tcpConnection->host();
@@ -145,21 +175,22 @@ bool FpgaFocuser::Connect()
 	FocusSpeedN[0].max = koheron_interface->get_maximum_period()*motorPeriodUs;
 	FocusBacklashPeriodN[0].min = FocusSpeedN[0].min;
 	FocusBacklashPeriodN[0].max = FocusSpeedN[0].max;
-	FocusMaxPosN[0].max = koheron_interface->GetGridPerRevolution();
-	FocusBacklashN[0].max = FocusMaxPosN[0].max;
-	FocusMaxPosN[0].min = FocusMaxPosN[0].max;
-	FocusMaxPosN[0].value = FocusMaxPosN[0].max;
 
-	FocusRelPosN[0].max = koheron_interface->GetGridPerRevolution()/100;
-
-	FocusAbsPosN[0].min = FocusSyncN[0].min = 0;
-	FocusAbsPosN[0].max = FocusSyncN[0].max = FocusMaxPosN[0].value;
-	FocusAbsPosN[0].step = (int) FocusAbsPosN[0].max / 1000;
-
+  SetFocuserMaxPosition(koheron_interface->GetGridPerRevolution());
+  FocusMaxPosN[0].max = 0x3FFFFFFF;
   if (savePosition(-1) != -1)
   {
-	  FocusAbsPosN[0].value = (int) savePosition(-1);
-    koheron_interface->SetFocuserPosition(FocusAbsPosN[0].value);
+	  uint32_t val = (int) savePosition(-1);
+    if (val > FocusAbsPosN[0].max)
+    {
+			DEBUG(INDI::Logger::DBG_ERROR, "Discarding stored AbsPosition as it is greater"
+          "than FocusAbsPosN.max");
+    }
+    else
+    {
+	    FocusAbsPosN[0].value = (int) savePosition(-1);
+      koheron_interface->SetFocuserPosition(FocusAbsPosN[0].value);
+    }
   }
   else
   {
@@ -332,20 +363,6 @@ bool FpgaFocuser::ISNewNumber(const char *dev, const char *name, double values[]
     // first we check if it's for our device
     if (!strcmp(dev, getDeviceName()))
     {
-        // handle focus maximum position
-        if (!strcmp(name, FocusMaxPosNP.name))
-        {
-            IUUpdateNumber(&FocusMaxPosNP, values, names, n);
-
-            FocusAbsPosN[0].max = FocusMaxPosN[0].value;
-            IUUpdateMinMax(&FocusAbsPosNP); // This call is not INDI protocol compliant
-
-            FocusAbsPosNP.s = IPS_OK;
-            IDSetNumber(&FocusMaxPosNP, nullptr);
-            getFocuserInfo();
-            return true;
-        }
-
         // handle focus absolute position
         if (!strcmp(name, FocusAbsPosNP.name))
         {

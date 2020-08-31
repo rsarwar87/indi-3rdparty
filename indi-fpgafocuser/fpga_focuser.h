@@ -51,6 +51,7 @@ protected:
   virtual bool SetFocuserBacklashEnabled(bool enabled);
   virtual bool SetFocuserSpeed(int speed);
 	virtual void TimerHit();
+	virtual bool SetFocuserMaxPosition(uint32_t value);
 private:
 	virtual bool Connect();
 	virtual bool Disconnect();
