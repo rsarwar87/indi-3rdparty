@@ -176,8 +176,8 @@ bool FpgaFocuser::Connect()
 	FocusBacklashPeriodN[0].min = FocusSpeedN[0].min;
 	FocusBacklashPeriodN[0].max = FocusSpeedN[0].max;
 
-  SetFocuserMaxPosition(koheron_interface->GetGridPerRevolution());
   FocusMaxPosN[0].max = 0x3FFFFFFF;
+  SetFocuserMaxPosition(koheron_interface->GetGridPerRevolution());
   if (savePosition(-1) != -1)
   {
 	  uint32_t val = (int) savePosition(-1);
