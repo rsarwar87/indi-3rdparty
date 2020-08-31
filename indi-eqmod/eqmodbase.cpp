@@ -131,6 +131,10 @@ EQMod::EQMod()
                            | TELESCOPE_HAS_PIER_SIDE | TELESCOPE_HAS_TRACK_RATE | TELESCOPE_HAS_TRACK_MODE | TELESCOPE_CAN_CONTROL_TRACK,
                            SLEWMODES);
 
+#ifdef _KOHERON
+    setTelescopeConnection(CONNECTION_TCP);
+#endif
+
     RAInverted = DEInverted = false;
     bzero(&syncdata, sizeof(syncdata));
     bzero(&syncdata2, sizeof(syncdata2));
@@ -724,6 +728,12 @@ bool EQMod::Handshake()
 {
     try
     {
+#ifdef _KOHERON
+        if (!mount->setKoheronInfo(tcpConnection->host(), tcpConnection->port()))
+          return false;
+        //mount->Handshake(tcpConnection->host(), tcpConnection->port());
+            //);
+#else
         if (!getActiveConnection()->name().compare("CONNECTION_TCP")
                 && tcpConnection->connectionType() == Connection::TCP::TYPE_UDP)
         {
@@ -731,6 +741,7 @@ bool EQMod::Handshake()
         }
 
         mount->setPortFD(PortFD);
+#endif
         mount->Handshake();
         // Mount initialisation is in updateProperties as it sets directly Indi properties which should be defined
     }

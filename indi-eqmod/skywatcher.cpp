@@ -17,6 +17,7 @@
 
 #include "skywatcher.h"
 
+#include <arpa/inet.h>
 #include "eqmodbase.h"
 
 #include <indicom.h>
@@ -32,15 +33,6 @@ Skywatcher::Skywatcher(EQMod *t)
     simulation    = false;
     telescope     = t;
     reconnect     = false;
-#ifdef _KOHERON
-    if (const char *env_ip = std::getenv("SKY_IP"))
-        koheron_interface = std::make_unique<ASCOM_sky_interface>(env_ip, 36000);
-    else
-    {
-        koheron_interface->print_error(__func__, "KOHERON SKY_IP NOT SET, targetting localhost");
-        koheron_interface = std::make_unique<ASCOM_sky_interface>("127.0.0.1", 36000);
-    }
-#endif
 }
 
 Skywatcher::~Skywatcher(void)
@@ -55,6 +47,25 @@ void Skywatcher::setDebug(bool enable)
 bool Skywatcher::isDebug()
 {
     return debug;
+}
+
+bool Skywatcher::setKoheronInfo(const char * ip, int port)
+{
+  if (ip == nullptr)
+  {
+    LOG_ERROR("Error! Server address is missing or invalid.");
+    return false;
+  }
+  struct sockaddr_in sa;
+  int result = inet_pton(AF_INET, ip, &(sa.sin_addr));
+  if (result == 0)
+  {
+    LOG_ERROR("Invalid IP.");
+    return false;
+  }
+  koheron_server_port = port;
+  koheron_server_ip = ip;
+  return true;
 }
 
 void Skywatcher::setPortFD(int value)
@@ -86,6 +97,15 @@ bool Skywatcher::Handshake()
     }
 
 #ifdef _KOHERON
+    try {
+        koheron_interface = std::make_unique<ASCOM_sky_interface>(koheron_server_ip.c_str(), koheron_server_port);
+    }
+    catch (const std::exception& e)
+    {
+	  		DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s:%d %s"
+            ,koheron_server_ip.c_str(), koheron_server_port, e.what());
+	  		return false;
+    }
     MCVersion = koheron_interface->SwpGetBoardVersion();
 #else
     uint32_t tmpMCVersion = 0;

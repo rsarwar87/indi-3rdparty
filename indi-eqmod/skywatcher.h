@@ -134,6 +134,7 @@ class Skywatcher
         bool GetSnapPort1Status();
         bool GetSnapPort2Status();
 
+        bool setKoheronInfo(const char * ip, int port);
         void setPortFD(int value);
 
     private:
@@ -145,6 +146,8 @@ class Skywatcher
         static constexpr double MIN_RATE         = 0.05;
         static constexpr double MAX_RATE         = 800.0;
         uint32_t minperiods[2];
+        uint32_t koheron_server_port;
+        std::string koheron_server_ip;
         //syslog_stream klog;
 
         // Types
