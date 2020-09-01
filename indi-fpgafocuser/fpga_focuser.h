@@ -55,7 +55,6 @@ protected:
 private:
 	virtual bool Connect();
 	virtual bool Disconnect();
-	virtual int savePosition(int pos);
 	virtual bool readtemp();
 
 	IText ActiveTelescopeT[1];
@@ -99,7 +98,6 @@ private:
   bool hw_is_initialized {false};
   bool hw_is_running {false};
   bool hw_direction {false};
-  bool detected_motion {false};
 
   bool validateIpAddress(const std::string &ipAddress)
   {
