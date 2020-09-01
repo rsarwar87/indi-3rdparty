@@ -716,7 +716,7 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 
 bool FpgaFocuser::ReverseFocuser(bool enabled)
 {
-  reverse_direction = enabled;
+  //reverse_direction = enabled;
 	if (enabled)
 	{
 		DEBUG(INDI::Logger::DBG_SESSION, "Reverse direction ENABLED.");

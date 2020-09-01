@@ -17,7 +17,6 @@
 
 #include "skywatcher.h"
 
-#include <arpa/inet.h>
 #include "eqmodbase.h"
 
 #include <indicom.h>
@@ -25,6 +24,7 @@
 #include <termios.h>
 #include <cmath>
 #include <cstring>
+#include <arpa/inet.h>
 
 Skywatcher::Skywatcher(EQMod *t)
 {
@@ -33,6 +33,7 @@ Skywatcher::Skywatcher(EQMod *t)
     simulation    = false;
     telescope     = t;
     reconnect     = false;
+
 }
 
 Skywatcher::~Skywatcher(void)
@@ -102,10 +103,11 @@ bool Skywatcher::Handshake()
     }
     catch (const std::exception& e)
     {
-	  		DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s:%d %s"
+                       DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s:%d %s"
             ,koheron_server_ip.c_str(), koheron_server_port, e.what());
-	  		return false;
+                       return false;
     }
+
     MCVersion = koheron_interface->SwpGetBoardVersion();
 #else
     uint32_t tmpMCVersion = 0;
