@@ -178,19 +178,9 @@ bool FpgaFocuser::Connect()
 
   FocusMaxPosN[0].max = 0x3FFFFFFF;
   SetFocuserMaxPosition(koheron_interface->GetGridPerRevolution());
-  if (savePosition(-1) != -1)
+  if (!hw_is_initialized)
   {
-	  uint32_t val = (int) savePosition(-1);
-    if (val > FocusAbsPosN[0].max)
-    {
-			DEBUG(INDI::Logger::DBG_ERROR, "Discarding stored AbsPosition as it is greater"
-          "than FocusAbsPosN.max");
-    }
-    else
-    {
-	    FocusAbsPosN[0].value = (int) savePosition(-1);
-      koheron_interface->SetFocuserPosition(FocusAbsPosN[0].value);
-    }
+    koheron_interface->SetFocuserPosition(FocusAbsPosN[0].value);
   }
   else
   {
@@ -480,7 +470,7 @@ bool FpgaFocuser::ISNewSwitch(const char *dev, const char *name, ISState *states
             //set absolute position to zero and save to file
             MoveAbsFocuser(koheron_interface->GetFocuserHomePosition());
             IDSetNumber(&FocusAbsPosNP, nullptr);
-            savePosition(0);
+            saveConfig(true, FocusAbsPosNP.name);
 
             DEBUG(INDI::Logger::DBG_SESSION, "Absolute Position reset to 0.");
 
@@ -726,50 +716,6 @@ bool FpgaFocuser::ReverseFocuser(bool enabled)
 	return true;
 }
 
-int FpgaFocuser::savePosition(int pos)
-{
-	FILE * pFile;
-	char posFileName[MAXRBUF];
-	char buf [100];
-
-	if (getenv("INDICONFIG"))
-	{
-		snprintf(posFileName, MAXRBUF, "%s.position", getenv("INDICONFIG"));
-	} else {
-		snprintf(posFileName, MAXRBUF, "%s/.indi/%s.position", getenv("HOME"), getDeviceName());
-	}
-
-
-	if (pos == -1)
-	{
-		pFile = fopen (posFileName,"r");
-		if (pFile == NULL)
-		{
-			DEBUGF(INDI::Logger::DBG_ERROR, "Failed to open file %s.", posFileName);
-			return -1;
-		}
-
-		fgets (buf , 100, pFile);
-		pos = atoi (buf);
-		DEBUGF(INDI::Logger::DBG_DEBUG, "Reading position %d from %s.", pos, posFileName);
-	} else {
-		pFile = fopen (posFileName,"w");
-		if (pFile == NULL)
-		{
-			DEBUGF(INDI::Logger::DBG_ERROR, "Failed to open file %s.", posFileName);
-			return -1;
-		}
-
-		sprintf(buf, "%d", pos);
-		fputs (buf, pFile);
-		DEBUGF(INDI::Logger::DBG_DEBUG, "Writing position %s to %s.", buf, posFileName);
-	}
-
-	fclose (pFile);
-
-	return pos;
-}
-
 bool FpgaFocuser::readtemp()
 {
 
@@ -867,23 +813,25 @@ void FpgaFocuser::updateStatusFunc()
   hw_is_initialized      = response[0];
   hw_is_running          = response[1];
   hw_direction = response[2];
-  detected_motion	= false;
+  static bool detected_motion	= false;
 	FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
-    if (!hw_is_running)
-    {
-	    FocusRelPosNP.s = IPS_OK;
-	    IDSetNumber(&FocusRelPosNP, nullptr);
-	    FocusAbsPosNP.s = IPS_OK;
-	    savePosition((int) FocusAbsPosN[0].value); 
-			if (detected_motion) DEBUG(INDI::Logger::DBG_SESSION, "Hardware motion stopped.");
-      detected_motion	= false;
+  if (!hw_is_running)
+  {
+	  FocusRelPosNP.s = IPS_OK;
+	  IDSetNumber(&FocusRelPosNP, nullptr);
+	  FocusAbsPosNP.s = IPS_OK;
+		if (detected_motion) {
+      DEBUG(INDI::Logger::DBG_SESSION, "Hardware motion stopped.");
+      saveConfig(true, FocusAbsPosNP.name);
     }
-    else
-    {
-      detected_motion	= true;
-	    FocusAbsPosNP.s = IPS_BUSY;
+    detected_motion	= false;
+  }
+  else
+  {
+    detected_motion	= true;
+	  FocusAbsPosNP.s = IPS_BUSY;
 
-    }
+  }
   IDSetNumber(&FocusAbsPosNP, nullptr);
 }
 void FpgaFocuser::updateStatus()
