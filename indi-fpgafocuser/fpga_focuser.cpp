@@ -579,6 +579,7 @@ bool FpgaFocuser::saveConfigItems(FILE *fp)
 	IUSaveConfigSwitch(fp, &TemperatureSensorSP);
 	IUSaveConfigSwitch(fp, &TemperatureCompensateSP);
 	IUSaveConfigNumber(fp, &FocusMaxPosNP);
+	IUSaveConfigNumber(fp, &FocusAbsPosNP);
 	IUSaveConfigNumber(fp, &FocusBacklashPeriodNP);
 	IUSaveConfigNumber(fp, &FocuserTravelNP);
 	IUSaveConfigNumber(fp, &PresetNP);
@@ -830,6 +831,7 @@ void FpgaFocuser::updateStatusFunc()
   {
     detected_motion	= true;
 	  FocusAbsPosNP.s = IPS_BUSY;
+	  updateStatusID = IEAddTimer(STATUS_UPDATE_TIMEOUT, updateStatusHelper, this);
 
   }
   IDSetNumber(&FocusAbsPosNP, nullptr);
@@ -840,14 +842,11 @@ void FpgaFocuser::updateStatus()
   {
     updateStatusFunc ();
   }
-	updateStatusID = IEAddTimer(STATUS_UPDATE_TIMEOUT, updateStatusHelper, this);
 }
 void FpgaFocuser::updateTemperature()
 {
 	if (isConnected())
 	  readtemp();
-
-	updateTemperatureID = IEAddTimer(TEMPERATURE_UPDATE_TIMEOUT, updateTemperatureHelper, this);
 }
 
 void FpgaFocuser::temperatureCompensation()
