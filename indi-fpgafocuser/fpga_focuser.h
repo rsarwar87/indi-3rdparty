@@ -44,7 +44,7 @@ public:
 protected:
 	virtual IPState MoveAbsFocuser(int ticks);
 	virtual IPState MoveRelFocuser(FocusDirection dir, int ticks);
-	virtual bool saveConfigItems(FILE *fp);
+	virtual bool saveConfigItems(FILE *fp) override;
 	virtual bool ReverseFocuser(bool enabled);
 	virtual bool AbortFocuser();
   virtual bool SetFocuserBacklash(int32_t steps);
@@ -55,6 +55,7 @@ protected:
 private:
 	virtual bool Connect();
 	virtual bool Disconnect();
+	virtual int savePosition(int pos);
 	virtual bool readtemp();
 
 	IText ActiveTelescopeT[1];
