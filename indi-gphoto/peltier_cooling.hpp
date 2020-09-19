@@ -1,16 +1,19 @@
 #ifndef __PELTIER_HEADER__
 #define __PELTIER_HEADER__
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <memory>
 #include <iostream>
 #include <chrono>
 #include <thread>
 #include <assert.h> 
-#include <stdio.h>
 #include <array>
-#include <string>
 #include <algorithm>
-#include <string.h>
-#include <stdio.h>
 #include "rpigpio_trigger.hpp"
 #include <arpa/inet.h>
 #include <cpr/cpr.h>
@@ -24,27 +27,31 @@ class PeltierTrigger
   public:
   PeltierTrigger (std::string port)
   {
-    is_esp = false;
-    is_pi = false;
-    is_http = false;
-    if (port.size() == 0) return;
-    if(isPiTrigger(port))
-    {
-      is_pi = true;
-      std::cout << "pr" << std::endl;
-      return;
-    }
-    if (SetEspIP(port))
-    {
-      std::cout << "esp" << std::endl;
-      is_esp = true;
-      return;
-    }
+    SetPort(port);
   }
 
   ~PeltierTrigger()
   {
     ptr_gpio.reset();
+  }
+
+  bool SetPort(std::string port){
+    ptr_gpio.reset();
+    is_esp = false;
+    is_pi = false;
+    is_http = false;
+    if (port.size() == 0) return false;
+    if(isPiTrigger(port))
+    {
+      is_pi = true;
+      return true;
+    }
+    if (SetEspIP(port))
+    {
+      is_esp = true;
+      return true;
+    }
+    return false;
   }
 
   bool start_cooling()
@@ -53,12 +60,10 @@ class PeltierTrigger
       ptr_gpio->SetGpio();
     else if (is_esp & !is_http)
     {
-      std::cout << "esph" << std::endl;
       return sendTCPCommand("\xA0\x01\x01\xA2");
     }
     else if (is_esp)
     {
-      std::cout << "esp" << std::endl;
       cpr::Response res = cpr::Get(cpr::Url{"http://" + esp_ip +"/RELAY=ON"});
       if (res.status_code != 200) return false;
     }
@@ -72,12 +77,10 @@ class PeltierTrigger
       ptr_gpio->ClearGpio();
     else if (is_esp & !is_http)
     {
-      std::cout << "esph" << std::endl;
       return sendTCPCommand("\xA0\x01\x00\xA1");
     }
     else if (is_esp)
     {
-      std::cout << "esp" << std::endl;
       cpr::Response res = cpr::Get(cpr::Url{"http://" + esp_ip +"/RELAY=OFF"});
       if (res.status_code != 200) return false;
     }
@@ -85,6 +88,14 @@ class PeltierTrigger
       return false;
     return true;
   }
+
+
+  private:
+  std::unique_ptr<PiGpioWrapper> ptr_gpio;
+  bool is_esp;
+  bool is_http;
+  bool is_pi;
+  std::string esp_ip;
 
   bool SetEspIP(std::string ip){
     struct sockaddr_in sa;
@@ -96,17 +107,8 @@ class PeltierTrigger
     esp_ip = ip;
     cpr::Response res = cpr::Get(cpr::Url{"http://" + esp_ip});
     is_http = (res.status_code == 200);
-    std::cout << "esp: " << is_http << std::endl;
     return true;
   }
-
-  private:
-  std::unique_ptr<PiGpioWrapper> ptr_gpio;
-  bool is_esp;
-  bool is_http;
-  bool is_pi;
-  std::string esp_ip;
-
   bool isPiTrigger(std::string port){
     size_t n = std::count(port.begin(), port.end(), '@');
     size_t n2 = std::count(port.begin(), port.end(), ':');
@@ -149,6 +151,7 @@ class PeltierTrigger
         return false; 
     } 
     send(sock , val, 4, 0); 
+    close(sock);
     return true;
   }
 

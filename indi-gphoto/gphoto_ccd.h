@@ -189,9 +189,6 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         // Cooler Power
         ITextVectorProperty CoolerIPTP;
         IText CoolerIPT[1];
-        // Cooler Power
-        INumberVectorProperty CoolerNP;
-        INumber CoolerN[1];
 
         ISwitchVectorProperty CoolerModeSP;
         ISwitch CoolerModeS[2];
