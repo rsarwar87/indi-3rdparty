@@ -1,3 +1,5 @@
+#ifndef __PIGPIO_HEADER__
+#define __PIGPIO_HEADER__
 #include <memory>
 #include <iostream>
 #include <chrono>
@@ -155,4 +157,5 @@ int main()
     std::this_thread::sleep_for(1s);
   }
 }
+#endif
 #endif

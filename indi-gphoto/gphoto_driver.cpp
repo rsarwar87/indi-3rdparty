@@ -32,13 +32,11 @@
 #include <indilogger.h>
 #include <gphoto2/gphoto2-version.h>
 #include <libraw/libraw.h>
+#include <cpr/cpr.h>
 
 #include "gphoto_driver.h"
 #include "dsusbdriver.h"
 #include <cmath>
-#ifdef _KOHERON
-#include <fpgacameratrigger.hpp>
-#endif
 #include "rpigpio_trigger.hpp"
 #define EOS_CUSTOMFUNCEX                "customfuncex"
 #define EOS_MIRROR_LOCKUP_ENABLE        "20,1,3,14,1,60f,1,1"
@@ -1588,7 +1586,7 @@ int gphoto_get_iso_current(gphoto_driver *gphoto)
 }
 
 gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model, const char *port,
-                           const char *shutter_release_port)
+                           const char *shutter_release_port, indi_cameratrigger_interface *ptr)
 {
     gphoto_driver *gphoto;
     gphoto_widget *widget;
@@ -1912,16 +1910,7 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
 #ifdef _KOHERON
         if (!strcmp(gphoto->bulb_port, "KFPGA"))
         {
-          if (const char *env_ip = std::getenv("SKY_IP"))
-          {
-            gphoto->fpgatrigger = new indi_cameratrigger_interface(env_ip, 36000);
-              DEBUGDEVICE(device, INDI::Logger::DBG_SESSION, "Connected to FpgaTrigger");
-          }
-          else
-          {
-            DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "%s KOHERON SKY_IP NOT SET; trying localhost", __func__);
-            gphoto->fpgatrigger = new indi_cameratrigger_interface("127.0.0.1", 36000);
-          }
+          gphoto->fpgatrigger = ptr;
         }
 #endif
         if (!strcmp(gphoto->bulb_port, "DSUSB"))

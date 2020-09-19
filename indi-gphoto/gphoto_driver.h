@@ -23,6 +23,9 @@
 #pragma once
 
 #include <gphoto2/gphoto2.h>
+#ifdef _KOHERON
+#include <fpgacameratrigger.hpp>
+#endif
 
 #define GP_UPLOAD_CLIENT 0
 #define GP_UPLOAD_SDCARD 1
@@ -87,7 +90,7 @@ void gphoto_set_format(gphoto_driver *gphoto, int format);
 int gphoto_get_format_current(gphoto_driver *gphoto);
 int gphoto_get_iso_current(gphoto_driver *gphoto);
 gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model, const char *port,
-                           const char *shutter_release_port);
+                           const char *shutter_release_port, indi_cameratrigger_interface *ptr);
 int gphoto_close(gphoto_driver *gphoto);
 void gphoto_get_buffer(gphoto_driver *gphoto, const char **buffer, size_t *size);
 void gphoto_free_buffer(gphoto_driver *gphoto);

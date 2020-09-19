@@ -39,6 +39,7 @@
 #define MAX_DEVICES  5 /* Max device cameraCount */
 #define FOCUS_TIMER  50
 #define MAX_RETRIES  3
+#define TEMP_THRESHOLD .25  /* Differential temperature threshold (C)*/
 
 extern char * me;
 
@@ -312,6 +313,8 @@ GPhotoCCD::GPhotoCCD(const char * model, const char * port) : FI(this)
     strncpy(this->port, port, MAXINDINAME);
     strncpy(this->model, model, MAXINDINAME);
 
+    fpgatrigger      = nullptr; 
+    peltier          = nullptr; 
     gphotodrv        = nullptr;
     frameInitialized = false;
     on_off[0]        = strdup("On");
@@ -373,6 +376,21 @@ bool GPhotoCCD::initProperties()
 
     FI::initProperties(FOCUS_TAB);
 
+#ifdef _KOHERON
+    // CCD Cooler Switch
+    IUFillSwitch(&CoolerS[0], "COOLER_ON", "On", ISS_OFF);
+    IUFillSwitch(&CoolerS[1], "COOLER_OFF", "Off", ISS_ON);
+    IUFillSwitchVector(&CoolerSP, CoolerS, 2, getDeviceName(), "CCD_COOLER", "Cooler", MAIN_CONTROL_TAB, IP_RW,
+                       ISR_1OFMANY, 0, IPS_IDLE);
+    // CCD Regulation power
+    IUFillNumber(&CoolerN[0], "CCD_COOLER_TEMP", "Cooling TEMP (C)", "%+06.2f", 0., 100., 5, 0.0);
+    IUFillNumberVector(&CoolerNP, CoolerN, 1, getDeviceName(), "CCD_COOLER_TEMP", "Cooling Temp", MAIN_CONTROL_TAB,
+                       IP_RO, 60, IPS_IDLE);
+    IUFillText(&CoolerIPT[0], "ESP_IP", "IP Address of Relay Switch", "");
+    IUFillTextVector(&CoolerIPTP, mPortT, NARRAY(CoolerIPT), getDeviceName(), "ESP_IP_ADDR", "IP Address of Relay Switch",
+                     MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
+#endif
+
     IUFillText(&mPortT[0], "PORT", "Port", "");
     IUFillTextVector(&PortTP, mPortT, NARRAY(mPortT), getDeviceName(), "DEVICE_PORT", "Shutter Release",
                      MAIN_CONTROL_TAB, IP_RW, 0, IPS_IDLE);
@@ -428,10 +446,18 @@ bool GPhotoCCD::initProperties()
     // Most cameras have this by default, so let's set it as default.
     IUSaveText(&BayerT[2], "RGGB");
 
+#ifdef _KOHERON
+#ifdef HAVE_WEBSOCKET
+    SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_ABORT | CCD_HAS_COOLER | CCD_HAS_BAYER | CCD_HAS_STREAMING | CCD_HAS_WEB_SOCKET);
+#else
+    SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_ABORT | CCD_HAS_COOLER | CCD_HAS_BAYER | CCD_HAS_STREAMING);
+#endif
+#else
 #ifdef HAVE_WEBSOCKET
     SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_ABORT | CCD_HAS_BAYER | CCD_HAS_STREAMING | CCD_HAS_WEB_SOCKET);
 #else
     SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_ABORT | CCD_HAS_BAYER | CCD_HAS_STREAMING);
+#endif
 #endif
 
     Streamer->setStreamingExposureEnabled(false);
@@ -465,6 +491,9 @@ void GPhotoCCD::ISGetProperties(const char * dev)
     INDI::CCD::ISGetProperties(dev);
 
     char configPort[MAXINDINAME] = {0};
+    char IPPort[MAXINDINAME] = {0};
+    if (IUGetConfigText(getDeviceName(), CoolerIPTP.name, CoolerIPT[0].name, IPPort, MAXINDINAME) == 0 && IPPort[0])
+        IUSaveText(&mPortT[0], IPPort);
     if (IUGetConfigText(getDeviceName(), PortTP.name, mPortT[0].name, configPort, MAXINDINAME) == 0 && configPort[0])
         IUSaveText(&mPortT[0], configPort);
     defineText(&PortTP);
@@ -479,6 +508,12 @@ void GPhotoCCD::ISGetProperties(const char * dev)
     IUGetConfigNumber(getDeviceName(), "CCD_INFO", "CCD_PIXEL_SIZE_Y", &pixel_y);
 
     INumberVectorProperty *nvp = PrimaryCCD.getCCDInfo();
+    
+#ifdef _KOHERON
+    defineSwitch(&CoolerSP);
+    defineText(&CoolerIPTP);
+    defineNumber(&CoolerNP);
+#endif
 
     if (!nvp)
         return;
@@ -540,6 +575,13 @@ bool GPhotoCCD::updateProperties()
             isTemperatureSupported = false;
         else
             isTemperatureSupported = gphoto_supports_temperature(gphotodrv);
+#ifdef _KOHERON
+            defineSwitch(&CoolerSP);
+            defineText(&CoolerIPTP);
+            defineNumber(&CoolerNP);
+            isTemperatureSupported = true;
+            TemperatureTimerID = IEAddTimer(POLLMS, GPhotoCCD::updateTemperatureHelper, this);
+#endif
 
         if (isTemperatureSupported)
         {
@@ -590,7 +632,23 @@ bool GPhotoCCD::ISNewText(const char * dev, const char * name, char * texts[], c
 {
     if (dev != nullptr && strcmp(dev, getDeviceName()) == 0)
     {
-        if (strcmp(name, PortTP.name) == 0)
+        if (strcmp(name, CoolerIPTP.name) == 0)
+        {
+            CoolerIPTP.s = IPS_OK;
+            IUUpdateText(&CoolerIPTP, texts, names, n);
+            if (peltier != nullptr)
+            {
+              if (peltier->SetEspIP(texts[0]))
+              {
+                CoolerIPTP.s = IPS_ALERT;
+                LOGF_ERROR("Invalid IP: %s", texts[0]);
+              }
+            }
+            IDSetText(&CoolerIPTP, nullptr);
+            saveConfig(true, CoolerIPTP.name);
+            return true;
+        }
+        else if (strcmp(name, PortTP.name) == 0)
         {
             const char *previousPort = mPortT[0].text;
             PortTP.s = IPS_OK;
@@ -976,11 +1034,35 @@ bool GPhotoCCD::Connect()
 
     if (isSimulation() == false)
     {
+#ifdef _KOHERON
+        if (const char *env_ip = std::getenv("SKY_IP"))
+        {
+            fpgatrigger = new indi_cameratrigger_interface(env_ip, 36000);
+            LOG_INFO("Connected to FpgaTrigger.");
+        }
+        else
+        {
+          LOG_INFO("KOHERON SKY_IP NOT SET; trying localhost");
+          fpgatrigger = new indi_cameratrigger_interface("127.0.0.1", 36000);
+        }
+        if (CoolerIPTP.tp[0].text && strlen(CoolerIPTP.tp[0].text))
+          peltier = new PeltierTrigger(CoolerIPTP.tp[0].text);
+        else
+          peltier = nullptr;
+#endif
         // Regular detect
         if (port[0] == '\0')
-            gphotodrv = gphoto_open(camera, context, nullptr, nullptr, shutter_release_port);
+            gphotodrv = gphoto_open(camera, context, nullptr, nullptr, shutter_release_port
+#ifdef _KOHERON
+                , fpgatrigger
+#endif
+                );
         else
-            gphotodrv = gphoto_open(camera, context, model, port, shutter_release_port);
+            gphotodrv = gphoto_open(camera, context, model, port, shutter_release_port
+#ifdef _KOHERON
+                , fpgatrigger
+#endif
+                );
         if (gphotodrv == nullptr)
         {
             LOG_ERROR("Can not open camera: Power OK? If camera is auto-mounted as external disk "
@@ -1144,6 +1226,10 @@ bool GPhotoCCD::Disconnect()
     if (isSimulation())
         return true;
     gphoto_close(gphotodrv);
+    if (peltier != nullptr) delete peltier;
+    peltier = nullptr;
+    if (fpgatrigger != nullptr) delete fpgatrigger;
+    fpgatrigger = nullptr;
     gphotodrv        = nullptr;
     frameInitialized = false;
     LOGF_INFO("%s is offline.", getDeviceName());
@@ -1322,6 +1408,7 @@ void GPhotoCCD::TimerHit()
                     PrimaryCCD.setExposureFailed();
                 }
 
+#ifndef _KOHERON
                 if (isTemperatureSupported)
                 {
                     double cameraTemperature = static_cast<double>(gphoto_get_last_sensor_temperature(gphotodrv));
@@ -1345,16 +1432,126 @@ void GPhotoCCD::TimerHit()
                         }
                     }
                 }
+#endif
             }
         }
         else
         {
-            //LOGF_DEBUG("Capture in progress. Time left %.2f seconds", timeleft);
-            if (timerID == -1)
-                SetTimer(POLLMS);
+          if (timerID == -1)
+            SetTimer(POLLMS);
         }
     }
 }
+
+#ifdef _KOHERON
+void GPhotoCCD::setCoolerEnabled(bool enable)
+{
+    bool isEnabled = IUFindOnSwitchIndex(&CoolerSP) == COOLER_ON;
+    if (isEnabled == enable)
+        return;
+
+    IUResetSwitch(&CoolerSP);
+    CoolerS[COOLER_ON].s = enable ? ISS_ON : ISS_OFF;
+    CoolerS[COOLER_OFF].s = enable ? ISS_OFF : ISS_ON;
+    CoolerSP.s = enable ? IPS_BUSY : IPS_IDLE;
+    IDSetSwitch(&CoolerSP, nullptr);
+}
+
+void GPhotoCCD::updateTemperatureHelper(void *p)
+{
+    static_cast<GPhotoCCD *>(p)->updateTemperature();
+}
+
+void GPhotoCCD::updateTemperature()
+{
+    float temp_val = 110.;
+    if (isConnected() == false)
+    {
+      if (peltier == nullptr)
+      {
+        if (TemperatureNP.s != IPS_ALERT)
+        {
+            LOG_ERROR("Peltier class failed to initialize.");
+            TemperatureNP.s = IPS_ALERT;
+            IDSetNumber(&TemperatureNP, nullptr);
+        }
+      }
+      else
+      {
+        switch (TemperatureNP.s)
+        {
+            case IPS_IDLE:
+            case IPS_OK:
+                temp_val = (float)fpgatrigger->GetTemp_pi1w();
+                if (temp_val > 100 || temp_val < -99)
+                {
+                  LOGF_ERROR("Invalid Temp value: %s.", temp_val);
+                  break;
+                }
+
+                if (fabs(TemperatureRequest - temp_val) <= -2.0)
+                {
+                    LOGF_INFO("Turning on cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
+                        temp_val, TemperatureRequest);
+                    peltier->start_cooling();
+                    TemperatureNP.s = IPS_BUSY;
+                }
+                TemperatureN[0].value = temp_val;
+                IDSetNumber(&TemperatureNP, nullptr);
+                break;
+
+            case IPS_BUSY:
+                temp_val = (float)fpgatrigger->GetTemp_pi1w();
+                if (temp_val > 100 || temp_val < -99)
+                {
+                  LOG_ERROR("Invalid Temp value.");
+                  break;
+                }
+
+                // If we're within threshold, let's make it BUSY ---> OK
+                if (fabs(TemperatureRequest - temp_val) <= TEMP_THRESHOLD)
+                {
+                    LOGF_INFO("Turning off cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
+                        temp_val, TemperatureRequest);
+                    peltier->stop_cooling();
+                    TemperatureNP.s = IPS_OK;
+                }
+
+                TemperatureN[0].value = temp_val;
+                IDSetNumber(&TemperatureNP, nullptr);
+                break;
+
+            case IPS_ALERT:
+                break;
+        }
+        }
+        }
+    if (TemperatureTimerID == -1)
+      TemperatureTimerID = IEAddTimer(POLLMS, GPhotoCCD::updateTemperatureHelper, this);
+        SetTimer(POLLMS);
+}
+
+int GPhotoCCD::SetTemperature(double temperature)
+{
+    // If there difference, for example, is less than 0.1 degrees, let's immediately return OK.
+    if (fabs(temperature - TemperatureN[0].value) < TEMP_THRESHOLD)
+        return 1;
+
+    /**********************************************************
+     *
+     *  IMPORRANT: Put here your CCD Set Temperature Function
+     *  We return 0 if setting the temperature will take some time
+     *  If the requested is the same as current temperature, or very
+     *  close, we return 1 and INDI::CCD will mark the temperature status as OK
+     *  If we return 0, INDI::CCD will mark the temperature status as BUSY
+     **********************************************************/
+
+    // Otherwise, we set the temperature request and we update the status in TimerHit() function.
+    TemperatureRequest = temperature;
+    LOGF_INFO("Setting CCD temperature to %+06.2f C", temperature);
+    return 0;
+}
+#endif
 
 void GPhotoCCD::UpdateExtendedOptions(void * p)
 {
@@ -2164,6 +2361,9 @@ bool GPhotoCCD::saveConfigItems(FILE * fp)
     // First save Device Port
     if (PortTP.tp[0].text)
         IUSaveConfigText(fp, &PortTP);
+    if (CoolerIPTP.tp[0].text)
+        IUSaveConfigText(fp, &CoolerIPTP);
+
 
     // Second save the CCD Info property
     IUSaveConfigNumber(fp, PrimaryCCD.getCCDInfo());

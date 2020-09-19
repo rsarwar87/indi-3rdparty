@@ -26,7 +26,9 @@
 
 #include <indiccd.h>
 #include <indifocuserinterface.h>
-
+#ifdef _KOHERON
+#include "peltier_cooling.hpp"
+#endif
 #include <map>
 #include <future>
 #include <string>
@@ -91,6 +93,9 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
 
         static void UpdateFocusMotionHelper(void *context);
         void UpdateFocusMotionCallback();
+#ifdef _KOHERON
+        int SetTemperature(double temperature);
+#endif
 
     protected:
         // Misc.
@@ -145,6 +150,10 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         char name[MAXINDIDEVICE];
         char model[MAXINDINAME];
         char port[MAXINDINAME];
+#ifdef _KOHERON
+        indi_cameratrigger_interface* fpgatrigger;
+        PeltierTrigger *peltier;
+#endif
 
         struct timeval ExpStart;
         double ExposureRequest;
@@ -160,6 +169,46 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         bool frameInitialized;
         bool isTemperatureSupported { false };
 
+#ifdef _KOHERON
+        /////////////////////////////////////////////////////////////////////////////
+        /// Properties: Camera Cooling Control
+        /////////////////////////////////////////////////////////////////////////////
+        // SDK Version
+        ITextVectorProperty SDKVersionTP;
+        IText SDKVersionT[1] {};
+
+        // Cooler Switch
+        ISwitchVectorProperty CoolerSP;
+        ISwitch CoolerS[2];
+        enum
+        {
+            COOLER_ON,
+            COOLER_OFF,
+        };
+
+        // Cooler Power
+        ITextVectorProperty CoolerIPTP;
+        IText CoolerIPT[1];
+        // Cooler Power
+        INumberVectorProperty CoolerNP;
+        INumber CoolerN[1];
+
+        ISwitchVectorProperty CoolerModeSP;
+        ISwitch CoolerModeS[2];
+        enum
+        {
+            COOLER_AUTOMATIC,
+            COOLER_MANUAL,
+        };
+        // Enable/disable cooler
+        void setCoolerEnabled(bool enable);
+        // Temperature update
+        void updateTemperature();
+        static void updateTemperatureHelper(void *);
+        float TemperatureRequest;
+        double ccdTemp;
+        int TemperatureTimerID;
+#endif
         // Focus
         bool m_CanFocus { false };
         int32_t m_TargetLargeStep {0}, m_TargetMedStep {0}, m_TargetLowStep {0}, m_FocusTimerID {-1};
