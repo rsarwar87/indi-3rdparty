@@ -189,6 +189,9 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         // Cooler Power
         ITextVectorProperty CoolerIPTP;
         IText CoolerIPT[1];
+        // Cooler Power
+        INumberVectorProperty RequestedTempNP;
+        INumber RequestedTempN[1];
 
         ISwitchVectorProperty CoolerModeSP;
         ISwitch CoolerModeS[2];
@@ -202,6 +205,7 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         // Temperature update
         void updateTemperature();
         static void updateTemperatureHelper(void *);
+        bool manualRequest;
         float TemperatureRequest;
         double ccdTemp;
         int TemperatureTimerID;

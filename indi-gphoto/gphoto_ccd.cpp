@@ -575,12 +575,15 @@ bool GPhotoCCD::updateProperties()
             defineSwitch(&CoolerSP);
             defineText(&CoolerIPTP);
             isTemperatureSupported = true;
+            manualRequest = false;
             TemperatureTimerID = IEAddTimer(POLLMS, GPhotoCCD::updateTemperatureHelper, this);
 #endif
 
         if (isTemperatureSupported)
         {
+#ifndef _KOHERON
             TemperatureNP.p = IP_RO;
+#endif
             defineNumber(&TemperatureNP);
         }
 
@@ -642,7 +645,6 @@ bool GPhotoCCD::ISNewText(const char * dev, const char * name, char * texts[], c
             }
             if (TemperatureTimerID == -1)
               TemperatureTimerID = IEAddTimer(POLLMS, GPhotoCCD::updateTemperatureHelper, this);
-                SetTimer(POLLMS);
             IDSetText(&CoolerIPTP, nullptr);
             saveConfig(true, CoolerIPTP.name);
             return true;
@@ -749,6 +751,7 @@ bool GPhotoCCD::ISNewSwitch(const char * dev, const char * name, ISState * state
                 setCoolerEnabled(false);
                 LOG_INFO("Cooler Turned OFF");
             }
+            manualRequest = true;
 
             IDSetSwitch(&forceBULBSP, nullptr);
             return true;
@@ -1494,8 +1497,7 @@ void GPhotoCCD::updateTemperatureHelper(void *p)
 void GPhotoCCD::updateTemperature()
 {
     float temp_val = 110.;
-    LOG_INFO("TEMP.");
-    if (isConnected() == false)
+    if (isConnected() == true)
     {
       if (peltier == nullptr)
       {
@@ -1508,61 +1510,60 @@ void GPhotoCCD::updateTemperature()
       }
       else
       {
-                temp_val = (float)fpgatrigger->GetTemp_pi1w();
-                LOGF_INFO("TEMP. %f", temp_val);
-                if (temp_val > 100 || temp_val < -99)
-                {
-                  LOGF_ERROR("Invalid Temp value: %f", temp_val);
-                }
-                else
-                {
-                TemperatureN[0].value = temp_val;
-                IDSetNumber(&TemperatureNP, nullptr);
-                }
-        switch (TemperatureNP.s)
+        temp_val = (float)fpgatrigger->GetTemp_pi1w();
+        if (temp_val > 50 || temp_val < -50)
         {
-            case IPS_IDLE:
-            case IPS_OK:
-
-                if (fabs(TemperatureRequest - temp_val) <= -2.0)
-                {
-                    LOGF_INFO("Turning on cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
-                        temp_val, TemperatureRequest);
-                    setCoolerEnabled(true);
-                    peltier->start_cooling();
-                    TemperatureNP.s = IPS_BUSY;
-                IDSetNumber(&TemperatureNP, nullptr);
-                }
-                break;
-
-            case IPS_BUSY:
-
-                // If we're within threshold, let's make it BUSY ---> OK
-                if (fabs(TemperatureRequest - temp_val) <= TEMP_THRESHOLD)
-                {
-                    LOGF_INFO("Turning off cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
-                        temp_val, TemperatureRequest);
-                    setCoolerEnabled(false);
-                    TemperatureNP.s = IPS_OK;
-                IDSetNumber(&TemperatureNP, nullptr);
-                }
-
-                break;
-
-            case IPS_ALERT:
-                break;
+          TemperatureNP.s = IPS_ALERT;
+          LOGF_ERROR("Invalid Temp value: %f. Turning off cooler if it is ON.", temp_val);
+          if (CoolerS[COOLER_ON].s == ISS_ON) 
+            setCoolerEnabled(false);
+          TemperatureNP.s = IPS_ALERT;
+          IDSetNumber(&TemperatureNP, nullptr);
+        }
+        else
+        {
+          TemperatureN[0].value = temp_val;
+          IDSetNumber(&TemperatureNP, nullptr);
+          if (!manualRequest)
+          {
+            if (CoolerS[COOLER_ON].s == ISS_OFF)
+            {
+              if (TemperatureRequest < temp_val - 1.0)
+              {
+                  LOGF_INFO("Turning on cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
+                      temp_val, TemperatureRequest);
+                  setCoolerEnabled(true);
+                  peltier->start_cooling();
+                  TemperatureNP.s = IPS_BUSY;
+                  IDSetNumber(&TemperatureNP, nullptr);
+              }
+            }
+            else
+            {
+              // If we're within threshold, let's make it BUSY ---> OK
+              if (TemperatureRequest > temp_val + 1.0)
+              {
+                  LOGF_INFO("Turning off cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
+                      temp_val, TemperatureRequest);
+                  setCoolerEnabled(false);
+                  TemperatureNP.s = IPS_OK;
+                  IDSetNumber(&TemperatureNP, nullptr);
+              }
+            }
+          }
         }
       }
     }
-    if (TemperatureTimerID == -1)
-      TemperatureTimerID = IEAddTimer(1000, GPhotoCCD::updateTemperatureHelper, this);
+    TemperatureTimerID = IEAddTimer(5000, GPhotoCCD::updateTemperatureHelper, this);
 }
 
 int GPhotoCCD::SetTemperature(double temperature)
 {
     // If there difference, for example, is less than 0.1 degrees, let's immediately return OK.
-    if (fabs(temperature - TemperatureN[0].value) < TEMP_THRESHOLD)
-        return 1;
+    TemperatureRequest = temperature;
+    manualRequest = false;
+   // if (TemperatureRequest > TemperatureN[0].value) 
+   //     return 1;
 
     /**********************************************************
      *
@@ -1574,8 +1575,9 @@ int GPhotoCCD::SetTemperature(double temperature)
      **********************************************************/
 
     // Otherwise, we set the temperature request and we update the status in TimerHit() function.
-    TemperatureRequest = temperature;
-    setCoolerEnabled(true);
+    //setCoolerEnabled(true);
+    if (TemperatureTimerID == -1)
+      TemperatureTimerID = IEAddTimer(10000, GPhotoCCD::updateTemperatureHelper, this);
     LOGF_INFO("Setting CCD temperature to %+06.2f C", temperature);
     return 0;
 }
