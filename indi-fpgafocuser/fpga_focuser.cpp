@@ -893,7 +893,7 @@ void FpgaFocuser::updateStatusFunc()
     detected_motion	= true;
 	  FocusAbsPosNP.s = IPS_BUSY;
 	  updateStatusID = IEAddTimer(STATUS_UPDATE_TIMEOUT, updateStatusHelper, this);
-    }
+  }
   IDSetNumber(&FocusAbsPosNP, nullptr);
 }
 void FpgaFocuser::updateStatus()
@@ -908,6 +908,7 @@ void FpgaFocuser::updateTemperature()
 	if (!updateTemperatureID) updateTemperatureID = IEAddTimer(TEMPERATURE_UPDATE_TIMEOUT, updateTemperatureHelper, this); // set temperature update timer
 	if (isConnected())
 	  readtemp();
+	updateTemperatureID = IEAddTimer(TEMPERATURE_UPDATE_TIMEOUT, updateTemperatureHelper, this); // set temperature update timer
 }
 
 void FpgaFocuser::temperatureCompensation()
