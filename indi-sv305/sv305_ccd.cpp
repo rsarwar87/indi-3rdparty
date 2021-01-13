@@ -340,6 +340,7 @@ bool Sv305CCD::Connect()
         pthread_mutex_unlock(&cameraID_mutex);
         return false;
     }
+    usleep(0.5 * 1e6);
 
     // get camera properties
     status = SVBGetCameraProperty(cameraID, &cameraProperty);
@@ -369,6 +370,7 @@ bool Sv305CCD::Connect()
     }
 
     // read controls and feed UI
+    SVBSetControlValue(cameraID, SVB_EXPOSURE , (double)(1 * 1000000), SVB_FALSE);
     for(int i=0; i<controlsNum; i++)
     {
          // read control
@@ -667,7 +669,7 @@ bool Sv305CCD::StartExposure(float duration)
     ExposureRequest = duration;
 
     gettimeofday(&ExpStart, nullptr);
-    LOGF_INFO("Taking a %g seconds frame...\n", ExposureRequest);
+    LOGF_DEBUG("Taking a %g seconds frame...\n", ExposureRequest);
 
     InExposure = true;
 
@@ -992,7 +994,7 @@ void Sv305CCD::TimerHit()
                         usleep(100000);
                         pthread_mutex_lock(&cameraID_mutex);
 			status = SVBGetVideoData(cameraID, imageBuffer, PrimaryCCD.getFrameBufferSize(), 100 );
-                        LOG_INFO("Wait...");
+                        LOG_DEBUG("Wait...");
                     }
 
                     pthread_mutex_unlock(&cameraID_mutex);
@@ -1041,22 +1043,25 @@ void Sv305CCD::TimerHit()
 // helper : update camera control depending on control type
 bool Sv305CCD::updateControl(int ControlType, SVB_CONTROL_TYPE SVB_Control, double values[], char *names[], int n)
 {
-    IUUpdateNumber(&ControlsNP[ControlType], values, names, n);
 
+    IUUpdateNumber(&ControlsNP[ControlType], values, names, n);
+    LOGF_INFO("Camera control %d to %.f\n", ControlType, ControlsN[ControlType].value);
     pthread_mutex_unlock(&cameraID_mutex);
 
     // set control
     status = SVBSetControlValue(cameraID, SVB_Control , ControlsN[ControlType].value, SVB_FALSE);
     if(status != SVB_SUCCESS)
     {
-        LOGF_ERROR("Error, camera set control %d failed\n", ControlType);
+        LOGF_ERROR("Error, camera set control %d failed: sdk-id=%d, value=%.f\n", ControlType, SVB_Control, ControlsN[ControlType].value);
+        ControlsNP[ControlType].s = IPS_ALERT;
+        IDSetNumber(&ControlsNP[ControlType], nullptr);
+        return false;
     }
-    LOGF_INFO("Camera control %d to %.f\n", ControlType, ControlsN[ControlType].value);
+    ControlsNP[ControlType].s = IPS_OK;
+    IDSetNumber(&ControlsNP[ControlType], nullptr);
 
     pthread_mutex_unlock(&cameraID_mutex);
 
-    ControlsNP[ControlType].s = IPS_OK;
-    IDSetNumber(&ControlsNP[ControlType], nullptr);
     return true;
 }
 
