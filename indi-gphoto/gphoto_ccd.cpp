@@ -1469,6 +1469,13 @@ void GPhotoCCD::TimerHit()
 void GPhotoCCD::setCoolerEnabled(bool enable)
 {
     bool status = false;
+    if (peltier == nullptr || !peltier->get_is_connected())
+    {
+      LOGF_ERROR("%s: Failed to toggle cooler to %d.", __func__, enable);
+      CoolerSP.s = IPS_ALERT;
+      IDSetSwitch(&CoolerSP, nullptr);
+      return;
+    }
     if (enable) status = peltier->start_cooling();
     else status = peltier->stop_cooling();
 
@@ -1508,6 +1515,15 @@ void GPhotoCCD::updateTemperature()
             IDSetNumber(&TemperatureNP, nullptr);
         }
       }
+      else if (!peltier->get_is_connected())
+      {
+        if (TemperatureNP.s != IPS_ALERT)
+        {
+            LOG_ERROR("Peltier ESP cannot be reached");
+            TemperatureNP.s = IPS_ALERT;
+            IDSetNumber(&TemperatureNP, nullptr);
+        }
+      }
       else
       {
         temp_val = (float)fpgatrigger->GetTemp_pi1w();
@@ -1533,7 +1549,7 @@ void GPhotoCCD::updateTemperature()
                   LOGF_INFO("Turning on cooler: Current temp- %06.2f; Requested temp: %06.2f C", 
                       temp_val, TemperatureRequest);
                   setCoolerEnabled(true);
-                  peltier->start_cooling();
+                  //peltier->start_cooling();
                   TemperatureNP.s = IPS_BUSY;
                   IDSetNumber(&TemperatureNP, nullptr);
               }

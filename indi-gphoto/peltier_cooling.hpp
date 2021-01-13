@@ -40,6 +40,7 @@ class PeltierTrigger
     is_esp = false;
     is_pi = false;
     is_http = false;
+    is_connected = true;
     if (port.size() == 0) return false;
     if(isPiTrigger(port))
     {
@@ -51,6 +52,7 @@ class PeltierTrigger
       is_esp = true;
       return true;
     }
+    is_connected = false;
     return false;
   }
 
@@ -89,12 +91,16 @@ class PeltierTrigger
     return true;
   }
 
+  bool get_is_connected(){
+    return is_connected;
+  }
 
   private:
   std::unique_ptr<PiGpioWrapper> ptr_gpio;
   bool is_esp;
   bool is_http;
   bool is_pi;
+  bool is_connected;
   std::string esp_ip;
 
   bool SetEspIP(std::string ip){
