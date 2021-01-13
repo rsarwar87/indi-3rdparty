@@ -24,6 +24,8 @@
 
 #include <ASICamera2.h>
 
+#include <vector>
+
 #include <condition_variable>
 #include <mutex>
 #include <indiccd.h>
@@ -133,6 +135,8 @@ class ASICCD : public INDI::CCD
         bool activateCooler(bool enable);
         /** Set Video Format */
         bool setVideoFormat(uint8_t index);
+        /** Get if MonoBin is active, thus Bayer is irrelevant */
+        bool isMonoBinActive();
 
         char name[MAXINDIDEVICE];
 
@@ -143,13 +147,13 @@ class ASICCD : public INDI::CCD
         ISwitch CoolerS[2];
         ISwitchVectorProperty CoolerSP;
 
-        INumber *ControlN = nullptr;
+        std::vector<INumber>  ControlN;
         INumberVectorProperty ControlNP;
 
-        ISwitch *ControlS = nullptr;
+        std::vector<ISwitch>  ControlS;
         ISwitchVectorProperty ControlSP;
 
-        ISwitch *VideoFormatS;
+        std::vector<ISwitch>  VideoFormatS;
         ISwitchVectorProperty VideoFormatSP;
         uint8_t rememberVideoFormat = { 0 };
         ASI_IMG_TYPE currentVideoFormat;
@@ -174,7 +178,7 @@ class ASICCD : public INDI::CCD
         uint8_t m_ExposureRetry {0};
 
         ASI_CAMERA_INFO *m_camInfo;
-        ASI_CONTROL_CAPS *pControlCaps;
+        std::vector<ASI_CONTROL_CAPS> m_controlCaps;
 
         int genTimerID;
 

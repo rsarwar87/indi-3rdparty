@@ -246,8 +246,7 @@ bool Sv305CCD::initProperties()
     uint32_t cap = /* CCD_CAN_ABORT | */ CCD_HAS_BAYER | CCD_CAN_SUBFRAME | CCD_CAN_BIN | CCD_HAS_STREAMING;
 
     // SV305 Pro has an ST4 port
-    /* TODO : fix with real value */
-    if(strcmp(cameraInfo.FriendlyName, "SVBONY SV305 PRO")==0)
+    if(strcmp(cameraInfo.FriendlyName, "SVBONY SV305PRO")==0)
     {
         cap|= CCD_HAS_ST4_PORT;
     }
@@ -342,6 +341,9 @@ bool Sv305CCD::Connect()
     }
     usleep(0.5 * 1e6);
 
+    // wait a bit for the camera to get ready
+    usleep(0.5 * 1e6);
+
     // get camera properties
     status = SVBGetCameraProperty(cameraID, &cameraProperty);
     if (status != SVB_SUCCESS)
@@ -368,6 +370,10 @@ bool Sv305CCD::Connect()
         pthread_mutex_unlock(&cameraID_mutex);
         return false;
     }
+
+    // fix for SDK gain error issue
+    // set exposure time
+    SVBSetControlValue(cameraID, SVB_EXPOSURE , (double)(1 * 1000000), SVB_FALSE);
 
     // read controls and feed UI
     SVBSetControlValue(cameraID, SVB_EXPOSURE , (double)(1 * 1000000), SVB_FALSE);

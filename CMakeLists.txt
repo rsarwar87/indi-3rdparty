@@ -43,9 +43,10 @@ IF (UNIX OR APPLE)
             STRING(FIND ${SOURCE_FILE} fxload DIR7_FOUND)
             STRING(FIND ${SOURCE_FILE} libinovasdk DIR8_FOUND)
             STRING(FIND ${SOURCE_FILE} libsv305 DIR9_FOUND)
+            STRING(FIND ${SOURCE_FILE} libahp-xc DIR10_FOUND)
             IF (NOT ${DIR1_FOUND} EQUAL -1 OR NOT ${DIR2_FOUND} EQUAL -1 OR NOT ${DIR3_FOUND} EQUAL -1 OR NOT ${DIR4_FOUND} EQUAL -1 OR
                 NOT ${DIR5_FOUND} EQUAL -1 OR NOT ${DIR6_FOUND} EQUAL -1 OR NOT ${DIR7_FOUND} EQUAL -1 OR NOT ${DIR8_FOUND} EQUAL -1 OR
-                NOT ${DIR9_FOUND} EQUAL -1)
+                NOT ${DIR9_FOUND} EQUAL -1 OR NOT ${DIR10_FOUND})
                 LIST(REMOVE_ITEM ALL_SOURCE_FILES ${SOURCE_FILE})
             ENDIF ()
         ENDFOREACH ()
@@ -140,6 +141,7 @@ IF (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(WITH_PENTAX Off)
     set(WITH_GPSD Off)
     set(WITH_SV305 Off)
+    set(WITH_AHP_CORRELATOR Off)
 ENDIF ()
 # Disable apogee, qhy and mi with gcc 4.8 and earlier versions
 IF (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
@@ -209,6 +211,11 @@ add_subdirectory(libricohcamerasdk)
 endif()
 add_subdirectory(libpktriggercord)
 endif (WITH_PENTAX)
+
+# libahp-xc
+if (WITH_AHP_CORRELATOR)
+add_subdirectory(libahp-xc)
+endif(WITH_AHP_CORRELATOR)
 
 #toupbase dependencies
 if (WITH_TOUPBASE)
@@ -547,8 +554,14 @@ SET(LIBRARIES_FOUND FALSE)
 endif (PENTAX_FOUND)
 endif(WITH_PENTAX)
 
+# AHP
 if (WITH_AHP_CORRELATOR)
+find_package(AHPXC)
+if(AHPXC_FOUND)
 add_subdirectory(indi-ahp-correlator)
+else(AHPXC_FOUND)
+add_subdirectory(libahp-xc)
+endif(AHPXC_FOUND)
 endif(WITH_AHP_CORRELATOR)
 
 # sv305

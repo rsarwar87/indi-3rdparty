@@ -22,13 +22,7 @@
 
 #include "indiccd.h"
 #include "indicorrelator.h"
-
-#define HEADER_SIZE 16
-#define MAX_RESOLUTION 2048
-#define PIXEL_SIZE (AIRY / settingsN[0].value / MAX_RESOLUTION)
-#define STOP_BITS 2
-#define DATA_BITS 8
-#define BAUD_SIZE (STOP_BITS+DATA_BITS+1)
+#include <ahp/ahp_xc.h>
 
 class baseline : public INDI::Correlator
 {
@@ -42,13 +36,19 @@ public:
     inline bool Handshake() { return true; }
 };
 
-class Interferometer : public INDI::CCD
+class AHP_XC : public INDI::CCD
 {
 public:
-    Interferometer();
-    ~Interferometer() {
-        for(int x = 0; x < NUM_BASELINES(); x++)
+    AHP_XC();
+    ~AHP_XC() {
+        for(int x = 0; x < ahp_xc_get_nbaselines(); x++)
             baselines[x]->~baseline();
+
+        for(int x = 0; x < ahp_xc_get_nlines(); x++)
+            ahp_xc_set_leds(x, 0);
+
+        ahp_xc_set_baudrate(R_57600);
+        ahp_xc_disconnect();
 
         free(correlationsN);
 
@@ -88,6 +88,14 @@ public:
         free(lineDevicesT);
         free(lineDevicesTP);
 
+        free(autocorrelationsB);
+        free(crosscorrelationsB);
+        free(plotB);
+
+        free(autocorrelations_str);
+        free(crosscorrelations_str);
+        free(plot_str);
+
         free(totalcounts);
         free(totalcorrelations);
         free(alt);
@@ -103,7 +111,6 @@ public:
     bool ISNewBLOB(const char *dev, const char *name, int sizes[], int blobsizes[], char *blobs[], char *formats[], char *names[], int n);
     bool ISSnoopDevice(XMLEle *root);
 
-    void CaptureThread();
 protected:
 
     // General device functions
@@ -120,14 +127,9 @@ protected:
     void TimerHit();
     void addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip);
 
-    bool Handshake();
-    void setConnection(const uint8_t &value);
-    uint8_t getConnection() const;
+    bool Connect();
 
     Connection::Serial *serialConnection;
-
-    // For Serial connection
-    int PortFD = -1;
 
 private:
 
@@ -140,6 +142,8 @@ private:
         SET_FREQ_DIV = 5,
         ENABLE_CAPTURE = 13
     };
+
+    std::thread *readThread;
 
     INumber *correlationsN;
     INumberVectorProperty correlationsNP;
@@ -181,11 +185,25 @@ private:
     ITextVectorProperty *lineDevicesTP;
 
     double *totalcounts;
-    double *totalcorrelations;
+    ahp_xc_correlation *totalcorrelations;
     double  *alt;
     double *az;
     double *delay;
+    double *framebuffer;
     baseline** baselines;
+
+    IBLOB *autocorrelationsB;
+    IBLOBVectorProperty autocorrelationsBP;
+
+    IBLOB *crosscorrelationsB;
+    IBLOBVectorProperty crosscorrelationsBP;
+
+    IBLOB *plotB;
+    IBLOBVectorProperty plotBP;
+
+    dsp_stream_p *autocorrelations_str;
+    dsp_stream_p *crosscorrelations_str;
+    dsp_stream_p *plot_str;
 
     INumber settingsN[2];
     INumberVectorProperty settingsNP;
@@ -193,7 +211,7 @@ private:
     unsigned int clock_frequency;
     unsigned int clock_divider;
 
-    double timeleft;
+    float timeleft;
     double wavelength;
     void Callback();
     bool callHandshake();
@@ -203,27 +221,24 @@ private:
     bool SendChar(char);
     bool SendCommand(it_cmd cmd, unsigned char value = 0);
     void ActiveLine(int, bool, bool);
-    void SetFrequencyDivider(unsigned int divider);
+    void SetFrequencyDivider(unsigned char divider);
     void EnableCapture(bool start);
+    void sendFile(IBLOB* Blobs, IBLOBVectorProperty BlobP, int len);
+    int getFileIndex(const char * dir, const char * prefix, const char * ext);
+    float CalcTimeLeft(timeval start, float req);
     // Struct to keep timing
     struct timeval ExpStart;
     float ExposureRequest;
-    double ExposureStart;
+    float ExposureStart;
     bool threadsRunning;
-
-    inline int NUM_BASELINES() { return NUM_LINES*(NUM_LINES-1)/2; }
-    inline int FRAME_SIZE() { return ((NUM_BASELINES()+NUM_LINES)*SAMPLE_SIZE)+HEADER_SIZE; }
-    inline double FRAME_TIME() { return (double)FRAME_SIZE()*BAUD_SIZE/(double)serialConnection->baud(); }
-    inline double SAMPLE_RATE() { return pow(2, SAMPLE_SIZE*4)*serialConnection->baud(); }
 
     inline double getCurrentTime()
     {
-        struct timeval curTime;
-        gettimeofday(&curTime, nullptr);
-        return (double)curTime.tv_sec+(double)curTime.tv_usec/1000000.0;
+        struct timeval now
+        {
+            0, 0
+        };
+        gettimeofday(&now, nullptr);
+        return (double)(now.tv_sec)+(double)now.tv_usec/1000000.0;
     }
-
-    int NUM_LINES;
-    int DELAY_LINES;
-    int SAMPLE_SIZE;
 };

@@ -268,8 +268,8 @@ bool ToupBase::initProperties()
     ///////////////////////////////////////////////////////////////////////////////////
     // Black Level RAW
     ///////////////////////////////////////////////////////////////////////////////////
-    IUFillNumber(&BlackLevelN[TC_BLACK_LEVEL], "TC_BLACK_LEVEL", "Gray", "%.f", 0, 255, 10, 0);
-    IUFillNumberVector(&BlackLevelNP, BlackLevelN, 1, getDeviceName(), "CCD_BLACK_LEVEL", "Black Level", LEVEL_TAB, IP_RW,
+    IUFillNumber(&OffsetN[TC_OFFSET], "OFFSET", "Value", "%.f", 0, 255, 10, 0);
+    IUFillNumberVector(&OffsetNP, OffsetN, 1, getDeviceName(), "CCD_OFFSET", "Offset", CONTROL_TAB, IP_RW,
                        60, IPS_IDLE);
 
     ///////////////////////////////////////////////////////////////////////////////////
@@ -327,6 +327,12 @@ bool ToupBase::initProperties()
     IUFillSwitch(&WBAutoS[TC_AUTO_WB_RGB], "TC_AUTO_WB_RGB", "RGB", ISS_OFF);
     IUFillSwitchVector(&WBAutoSP, WBAutoS, 2, getDeviceName(), "TC_AUTO_WB", "Default WB Mode", MAIN_CONTROL_TAB, IP_RW,
                        ISR_1OFMANY, 60, IPS_IDLE);
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    /// Analog Digital Converter
+    ///////////////////////////////////////////////////////////////////////////////////
+    IUFillNumber(&ADCN[0], "ADC_BITDEPTH", "Bit Depth", "%.f", 8, 32, 0, 8);
+    IUFillNumberVector(&ADCNP, ADCN, 1, getDeviceName(), "ADC", "ADC", IMAGE_INFO_TAB,  IP_RO, 60, IPS_IDLE);
 
     ///////////////////////////////////////////////////////////////////////////////////
     /// Gain Conversion settings
@@ -389,6 +395,9 @@ bool ToupBase::initProperties()
     IUFillText(&FirmwareT[TC_FIRMWARE_REV], "Revision", "Revision", nullptr);
     IUFillTextVector(&FirmwareTP, FirmwareT, 5, getDeviceName(), "Firmware", "Firmware", "Firmware", IP_RO, 0, IPS_IDLE);
 
+    IUFillText(&SDKVersionT[0], "VERSION", "Version", nullptr);
+    IUFillTextVector(&SDKVersionTP, SDKVersionT, 1, getDeviceName(), "SDK", "SDK", "Firmware", IP_RO, 0, IPS_IDLE);
+
     PrimaryCCD.setMinMaxStep("CCD_BINNING", "HOR_BIN", 1, 4, 1, false);
     PrimaryCCD.setMinMaxStep("CCD_BINNING", "VER_BIN", 1, 4, 1, false);
 
@@ -432,6 +441,7 @@ bool ToupBase::updateProperties()
         defineSwitch(&AutoExposureSP);
         defineSwitch(&VideoFormatSP);
         defineSwitch(&ResolutionSP);
+        defineNumber(&ADCNP);
 
         if (m_Instance->model->flag & (CP(FLAG_CG) | CP(FLAG_CGHDR)))
         {
@@ -443,7 +453,7 @@ bool ToupBase::updateProperties()
         // Levels
         defineNumber(&LevelRangeNP);
         defineNumber(&BlackBalanceNP);
-        defineNumber(&BlackLevelNP);
+        defineNumber(&OffsetNP);
 
         // Balance
         if (m_MonoCamera == false)
@@ -454,6 +464,7 @@ bool ToupBase::updateProperties()
 
         // Firmware
         defineText(&FirmwareTP);
+        defineText(&SDKVersionTP);
     }
     else
     {
@@ -476,6 +487,7 @@ bool ToupBase::updateProperties()
         deleteProperty(AutoExposureSP.name);
         deleteProperty(VideoFormatSP.name);
         deleteProperty(ResolutionSP.name);
+        deleteProperty(ADCNP.name);
 
         if (m_Instance->model->flag & (CP(FLAG_CG) | CP(FLAG_CGHDR)))
         {
@@ -485,7 +497,7 @@ bool ToupBase::updateProperties()
 
         deleteProperty(LevelRangeNP.name);
         deleteProperty(BlackBalanceNP.name);
-        deleteProperty(BlackLevelNP.name);
+        deleteProperty(OffsetNP.name);
 
         if (m_MonoCamera == false)
         {
@@ -493,8 +505,8 @@ bool ToupBase::updateProperties()
             deleteProperty(WBRGBNP.name);
         }
 
-
         deleteProperty(FirmwareTP.name);
+        deleteProperty(SDKVersionTP.name);
     }
 
     return true;
@@ -626,10 +638,16 @@ void ToupBase::setupParams()
     FP(get_Revision(m_CameraHandle, &pRevision));
     snprintf(firmwareBuffer, 32, "%d", pRevision);
     IUSaveText(&FirmwareT[TC_FIRMWARE_REV], firmwareBuffer);
+    FirmwareTP.s = IPS_OK;
+
+    // SDK Version
+    IUSaveText(&SDKVersionT[0], FP(Version()));
+    SDKVersionTP.s = IPS_OK;
 
     // Max supported bit depth
     m_MaxBitDepth = FP(get_MaxBitDepth(m_CameraHandle));
     LOGF_DEBUG("Max bit depth: %d", m_MaxBitDepth);
+    ADCN[0].value = m_MaxBitDepth;
 
     m_BitsPerPixel = 8;
     int nVal = 0;
@@ -936,8 +954,8 @@ void ToupBase::setupParams()
     // Therefore, black level is a saved option
     // Set range of black level based on max bit depth RAW
     int bLevelStep = 1 << (m_MaxBitDepth - 8);
-    BlackLevelN[TC_BLACK_LEVEL].max = CP(BLACKLEVEL8_MAX) * bLevelStep;
-    BlackLevelN[TC_BLACK_LEVEL].step = bLevelStep;
+    OffsetN[TC_OFFSET].max = CP(BLACKLEVEL8_MAX) * bLevelStep;
+    OffsetN[TC_OFFSET].step = bLevelStep;
 
 
     // Allocate memory
@@ -1196,31 +1214,31 @@ bool ToupBase::ISNewNumber(const char *dev, const char *name, double values[], c
         }
 
         //////////////////////////////////////////////////////////////////////
-        /// Black Level RAW
+        /// Offset
         //////////////////////////////////////////////////////////////////////
-        if (!strcmp(name, BlackLevelNP.name))
+        if (!strcmp(name, OffsetNP.name))
         {
-            IUUpdateNumber(&BlackLevelNP, values, names, n);
+            IUUpdateNumber(&OffsetNP, values, names, n);
             int bLevel =
             {
-                static_cast<uint16_t>(BlackLevelN[TC_BLACK_LEVEL].value),
+                static_cast<uint16_t>(OffsetN[TC_OFFSET].value),
 
             };
 
-            HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_BLACKLEVEL), BlackLevelN[TC_BLACK_LEVEL].value));
+            HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_BLACKLEVEL), OffsetN[TC_OFFSET].value));
             if (FAILED(rc))
             {
-                BlackLevelNP.s = IPS_ALERT;
-                LOGF_ERROR("Failed to set Black Level. %s", errorCodes[rc].c_str());
+                OffsetNP.s = IPS_ALERT;
+                LOGF_ERROR("Failed to set Offset. %s", errorCodes[rc].c_str());
 
             }
             else
             {
-                BlackLevelNP.s = IPS_OK;
-                LOGF_DEBUG("Black level set to %d", bLevel);
+                OffsetNP.s = IPS_OK;
+                LOGF_DEBUG("Offset set to %d", bLevel);
             }
 
-            IDSetNumber(&BlackLevelNP, nullptr);
+            IDSetNumber(&OffsetNP, nullptr);
             return true;
         }
 
@@ -2239,7 +2257,7 @@ bool ToupBase::saveConfigItems(FILE * fp)
     IUSaveConfigNumber(fp, &ControlNP);
 
     IUSaveConfigNumber(fp, &GainConversionNP);
-    IUSaveConfigNumber(fp, &BlackLevelNP);
+    IUSaveConfigNumber(fp, &OffsetNP);
 
     if (m_MonoCamera == false)
         IUSaveConfigSwitch(fp, &WBAutoSP);
@@ -2308,7 +2326,7 @@ void ToupBase::pushCallback(const void* pData, const XP(FrameInfoV2)* pInfo, int
 
     INDI_UNUSED(bSnap);
 
-    if (Streamer->isStreaming())
+    if (Streamer->isStreaming() || Streamer->isRecording())
     {
         //std::unique_lock<std::mutex> guard(ccdBufferLock);
         //HRESULT rc = FP(PullImageV2(m_CameraHandle, PrimaryCCD.getFrameBuffer(), captureBits * m_Channels, &info));
@@ -2402,7 +2420,7 @@ void ToupBase::eventPullCallBack(unsigned event)
 
                 int captureBits = m_BitsPerPixel == 8 ? 8 : m_MaxBitDepth;
 
-                if (Streamer->isStreaming())
+                if (Streamer->isStreaming() || Streamer->isRecording())
                 {
                     std::unique_lock<std::mutex> guard(ccdBufferLock);
                     HRESULT rc = FP(PullImageV2(m_CameraHandle, PrimaryCCD.getFrameBuffer(), captureBits * m_Channels, &info));

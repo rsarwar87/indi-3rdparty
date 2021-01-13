@@ -243,7 +243,7 @@ uint32_t Skywatcher::GetDEPeriod()
 
 uint32_t Skywatcher::GetlastreadRAIndexer()
 {
-    if (MountCode != 0x04 && MountCode != 0x05)
+    if (MountCode != 0x04 && MountCode != 0x05 && MountCode != 0x20)
         throw EQModError(EQModError::ErrInvalidCmd, "Incorrect mount type");
     DEBUGF(telescope->DBG_SCOPE_STATUS, "%s() = %ld", __FUNCTION__, static_cast<long>(lastreadIndexer[Axis1]));
     return lastreadIndexer[Axis1];
@@ -251,7 +251,7 @@ uint32_t Skywatcher::GetlastreadRAIndexer()
 
 uint32_t Skywatcher::GetlastreadDEIndexer()
 {
-    if (MountCode != 0x04 && MountCode != 0x05)
+    if (MountCode != 0x04 && MountCode != 0x05 && MountCode != 0x20)
         throw EQModError(EQModError::ErrInvalidCmd, "Incorrect mount type");
     DEBUGF(telescope->DBG_SCOPE_STATUS, "%s() = %ld", __FUNCTION__, static_cast<long>(lastreadIndexer[Axis2]));
     return lastreadIndexer[Axis2];
@@ -490,9 +490,9 @@ void Skywatcher::Init()
 
 void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
 {
-    unsigned nprop = 0;
-    char *boardinfo[2];
-    const char *boardinfopropnames[] = { "MOUNT_TYPE", "MOTOR_CONTROLLER" };
+    unsigned nprop             = 0;
+    char *boardinfo[3];
+    const char *boardinfopropnames[] = { "MOUNT_TYPE", "MOTOR_CONTROLLER", "MOUNT_CODE" };
 
     /*
     uint32_t tmpMCVersion = 0;
@@ -503,9 +503,14 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     MCVersion = ((tmpMCVersion & 0xFF) << 16) | ((tmpMCVersion & 0xFF00)) | ((tmpMCVersion & 0xFF0000) >> 16);
     MountCode=MCVersion & 0xFF;
     */
+#ifdef _KOHERON
+    minperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) ;
+    minperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) ;
+#else
     minperiods[Axis1] = 6;
     minperiods[Axis2] = 6;
-    nprop             = 2;
+#endif
+    nprop             = 3;
     //  strcpy(boardinfopropnames[0],"MOUNT_TYPE");
     boardinfo[0] = (char *)malloc(20 * sizeof(char));
     switch (MountCode)
@@ -531,6 +536,9 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
         case 0x06:
             strcpy(boardinfo[0], "AZEQ5");
             break;
+        case 0x20:
+            strcpy(boardinfo[0], "EQ8-R Pro");
+            break;
         case 0x23:
             strcpy(boardinfo[0], "EQ6-R Pro");
             break;
@@ -546,6 +554,9 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
         case 0x90:
             strcpy(boardinfo[0], "DOB");
             break;
+        case 0xA5:
+            strcpy(boardinfo[0], "AZ-GTi");
+            break;
         case 0xF0:
             strcpy(boardinfo[0], "GEEHALEL");
             minperiods[Axis1] = 13;
@@ -556,14 +567,13 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
             break;
     }
     strcpy(boardinfo[0], "CUSTOM");
-#ifdef _KOHERON
-    minperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) ;
-    minperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) ;
-#endif
 
     boardinfo[1] = (char *)malloc(5);
     sprintf(boardinfo[1], "%04x", (MCVersion >> 8));
     boardinfo[1][4] = '\0';
+    boardinfo[2] = (char *)malloc(5);
+    sprintf(boardinfo[2], "0x%02X", MountCode);
+    boardinfo[2][4] = '\0';
     // should test this is ok
     IUUpdateText(boardTP, boardinfo, (char **)boardinfopropnames, nprop);
     IDSetText(boardTP, nullptr);
@@ -578,6 +588,7 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     */
     free(boardinfo[0]);
     free(boardinfo[1]);
+    free(boardinfo[2]);
 }
 
 void Skywatcher::InquireFeatures()
@@ -645,7 +656,7 @@ bool Skywatcher::HasPPEC()
 
 bool Skywatcher::HasSnapPort1()
 {
-    return MountCode == 0x04 || MountCode == 0x05 || MountCode == 0x06 || MountCode == 0x23;
+    return MountCode == 0x04 ||  MountCode == 0x05 ||  MountCode == 0x06 ||  MountCode == 0x23 || MountCode == 0xA5;
 }
 
 bool Skywatcher::HasSnapPort2()
