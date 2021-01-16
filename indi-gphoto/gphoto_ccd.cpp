@@ -312,6 +312,7 @@ GPhotoCCD::GPhotoCCD(const char * model, const char * port) : FI(this)
     strncpy(this->port, port, MAXINDINAME);
     strncpy(this->model, model, MAXINDINAME);
 
+    fpgatrigger      = nullptr; 
     gphotodrv        = nullptr;
     frameInitialized = false;
     on_off[0]        = strdup("On");
@@ -540,6 +541,9 @@ bool GPhotoCCD::updateProperties()
             isTemperatureSupported = false;
         else
             isTemperatureSupported = gphoto_supports_temperature(gphotodrv);
+#ifdef _KOHERON
+            isTemperatureSupported = true;
+#endif
 
         if (isTemperatureSupported)
         {
@@ -981,11 +985,36 @@ bool GPhotoCCD::Connect()
 
     if (isSimulation() == false)
     {
+#ifdef _KOHERON
+        if (const char *env_ip = std::getenv("SKY_IP"))
+        {
+            fpgatrigger = new indi_cameratrigger_interface(env_ip, 36000);
+            LOG_INFO("Connected to FpgaTrigger.");
+        }
+        else
+        {
+          LOG_INFO("KOHERON SKY_IP NOT SET; trying localhost");
+          fpgatrigger = new indi_cameratrigger_interface("127.0.0.1", 36000);
+        }
+        if (fpgatrigger == nullptr)
+        {
+            LOG_ERROR("Failed to connect to FPGA SPI server");
+            return false;
+        }
+#endif
         // Regular detect
         if (port[0] == '\0')
-            gphotodrv = gphoto_open(camera, context, nullptr, nullptr, shutter_release_port);
+            gphotodrv = gphoto_open(camera, context, nullptr, nullptr, shutter_release_port
+#ifdef _KOHERON
+                , fpgatrigger
+#endif
+                );
         else
-            gphotodrv = gphoto_open(camera, context, model, port, shutter_release_port);
+            gphotodrv = gphoto_open(camera, context, model, port, shutter_release_port
+#ifdef _KOHERON
+                , fpgatrigger
+#endif
+                );
         if (gphotodrv == nullptr)
         {
             LOG_ERROR("Can not open camera: Power OK? If camera is auto-mounted as external disk "
@@ -1149,6 +1178,8 @@ bool GPhotoCCD::Disconnect()
     if (isSimulation())
         return true;
     gphoto_close(gphotodrv);
+    if (fpgatrigger != nullptr) delete fpgatrigger;
+    fpgatrigger = nullptr;
     gphotodrv        = nullptr;
     frameInitialized = false;
     LOGF_INFO("%s is offline.", getDeviceName());
@@ -1327,9 +1358,18 @@ void GPhotoCCD::TimerHit()
                     PrimaryCCD.setExposureFailed();
                 }
 
-                if (isTemperatureSupported)
+                if (isTemperatureSupported
+#ifdef _KOHERON
+                    && fpgatrigger != nullptr
+#endif
+                    )
                 {
-                    double cameraTemperature = static_cast<double>(gphoto_get_last_sensor_temperature(gphotodrv));
+                    double cameraTemperature = 0;
+#ifdef _KOHERON
+                    cameraTemperature = fpgatrigger->GetTemp_pi1w();
+#else
+                    cameraTemperature = static_cast<double>(gphoto_get_last_sensor_temperature(gphotodrv));
+#endif
                     if (fabs(cameraTemperature - TemperatureN[0].value) > 0.01)
                     {
                         // Check if we are getting bogus temperature values and set property to alert

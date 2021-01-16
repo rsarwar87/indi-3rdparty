@@ -145,6 +145,9 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         char name[MAXINDIDEVICE];
         char model[MAXINDINAME];
         char port[MAXINDINAME];
+#ifdef _KOHERON
+        indi_cameratrigger_interface* fpgatrigger;
+#endif
 
         struct timeval ExpStart;
         double ExposureRequest;
