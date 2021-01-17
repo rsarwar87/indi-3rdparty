@@ -62,6 +62,11 @@ private:
 	ITextVectorProperty ActiveTelescopeTP;
 	ISwitchVectorProperty MotorBoardSP;
 
+	ISwitch ServerDebugrS[2];
+	ISwitchVectorProperty ServerDebugSP;
+	ISwitch MotorTypeS[2];
+	ISwitchVectorProperty MotorTypeSP;
+
 	ISwitch ResetAbsPosS[1];
 	ISwitchVectorProperty ResetAbsPosSP;
 	ISwitch TemperatureCompensateS[2];

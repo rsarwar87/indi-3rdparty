@@ -262,14 +262,20 @@ bool FpgaFocuser::initProperties()
 
 	// Focuser temperature
 	IUFillNumber(&FocusTemperatureN[0], "FOCUS_TEMPERATURE_VALUE", "°C", "%0.2f", -50, 50, 1, 0);
-	IUFillNumberVector(&FocusTemperatureNP, FocusTemperatureN, 1, getDeviceName(), "FOCUS_TEMPERATURE", "Temperature", MAIN_CONTROL_TAB, IP_RO, 0, IPS_IDLE);
-	// Focuser temperature
-	IUFillNumber(&FocusTemperatureN[0], "FOCUS_TEMPERATURE_VALUE", "°C", "%0.2f", -50, 50, 1, 0);
 	IUFillNumberVector(&FocusTemperatureNP, FocusTemperatureN, 1, getDeviceName(), "FOCUS_TEMPERATURE", "Temperature", TEMP_TAB, IP_RO, 0, IPS_IDLE);
 
 	// Temperature Coefficient
 	IUFillNumber(&TemperatureCoefN[0], "μm/m°C", "", "%.1f", 0, 50, 1, 0);
 	IUFillNumberVector(&TemperatureCoefNP, TemperatureCoefN, 1, getDeviceName(), "Temperature Coefficient", "", TEMP_TAB, IP_RW, 0, IPS_IDLE);
+
+	// Compensate for temperature
+	IUFillSwitch(&ServerDebugrS[0], "Enable", "", ISS_OFF);
+	IUFillSwitch(&ServerDebugrS[1], "Disable", "", ISS_ON);
+	IUFillSwitchVector(&ServerDebugSP, ServerDebugrS, 2, getDeviceName(), "Enable SysLog Debugger in koheron server", "", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+	// Compensate for temperature
+	IUFillSwitch(&MotorTypeS[0], "DRV8825", "", ISS_ON);
+	IUFillSwitch(&MotorTypeS[1], "TMC2226", "", ISS_OFF);
+	IUFillSwitchVector(&MotorTypeSP, MotorTypeS, 2, getDeviceName(), "Switch between DRV8825 and TMC2226", "", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Compensate for temperature
 	IUFillSwitch(&TemperatureCompensateS[0], "Enable", "", ISS_OFF);
@@ -278,8 +284,8 @@ bool FpgaFocuser::initProperties()
 
 	// Source for temperature
 	IUFillSwitch(&TemperatureSensorS[0], "Pi-1wire (DS18B20)", "", ISS_ON);
-	IUFillSwitch(&TemperatureSensorS[1], "FPGA (analogue pin 14)", "", ISS_OFF);
-	IUFillSwitch(&TemperatureSensorS[2], "FPGA (analogue pin 15)", "", ISS_OFF);
+	IUFillSwitch(&TemperatureSensorS[1], "FPGA (pin 14)", "", ISS_OFF);
+	IUFillSwitch(&TemperatureSensorS[2], "FPGA (pin 15)", "", ISS_OFF);
 	IUFillSwitchVector(&TemperatureSensorSP, TemperatureSensorS, 3, getDeviceName(), "Temperature Sensor", "", TEMP_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// initial values at resolution 1/1
@@ -328,6 +334,8 @@ bool FpgaFocuser::updateProperties()
 		defineNumber(&FocuserInfoNP);
 		defineNumber(&FocusBacklashPeriodNP);
 		defineSwitch(&ResetAbsPosSP);
+		defineSwitch(&ServerDebugSP);
+		defineSwitch(&MotorTypeSP);
 
 		IDSnoopDevice(ActiveTelescopeT[0].text, "TELESCOPE_INFO");
 
@@ -355,6 +363,8 @@ bool FpgaFocuser::updateProperties()
 		deleteProperty(FocusTemperatureNP.name);
 		deleteProperty(TemperatureCoefNP.name);
 		deleteProperty(TemperatureCompensateSP.name);
+		deleteProperty(MotorTypeSP.name);
+		deleteProperty(ServerDebugSP.name);
 		deleteProperty(TemperatureSensorSP.name);
 	}
 
@@ -545,6 +555,50 @@ bool FpgaFocuser::ISNewSwitch(const char *dev, const char *name, ISState *states
             IDSetSwitch(&TemperatureCompensateSP, nullptr);
             return true;
         }
+        // handle temperature compensation
+        if (!strcmp(name, MotorTypeSP.name))
+        {
+            IUUpdateSwitch(&MotorTypeSP, states, names, n);
+
+            if (MotorTypeS[0].s == ISS_ON)
+            {
+	              koheron_interface->SetFocuserMotorType(false);
+                MotorTypeSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable DRV8825.");
+            }
+
+            if (MotorTypeS[1].s == ISS_ON)
+            {
+	              koheron_interface->SetFocuserMotorType(true);
+                MotorTypeSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable TMC2226.");
+            }
+
+            IDSetSwitch(&MotorTypeSP, nullptr);
+            return true;
+        }
+        // handle temperature compensation
+        if (!strcmp(name, ServerDebugSP.name))
+        {
+            IUUpdateSwitch(&ServerDebugSP, states, names, n);
+
+            if (ServerDebugrS[0].s == ISS_ON)
+            {
+	              koheron_interface->set_debug(true);
+                ServerDebugSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable Koheron server logging.");
+            }
+
+            if (ServerDebugrS[1].s == ISS_ON)
+            {
+	              koheron_interface->set_debug(false);
+                ServerDebugSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Disable Koheron server logging.");
+            }
+
+            IDSetSwitch(&ServerDebugSP, nullptr);
+            return true;
+        }
     }
 
     return INDI::Focuser::ISNewSwitch(dev, name, states, names, n);
@@ -593,6 +647,8 @@ bool FpgaFocuser::saveConfigItems(FILE *fp)
   tcpConnection->saveConfigItems(fp);
 	IUSaveConfigSwitch(fp, &FocusReverseSP);
 	IUSaveConfigSwitch(fp, &TemperatureSensorSP);
+	IUSaveConfigSwitch(fp, &ServerDebugSP);
+	IUSaveConfigSwitch(fp, &MotorTypeSP);
 	IUSaveConfigSwitch(fp, &TemperatureCompensateSP);
 	IUSaveConfigNumber(fp, &FocusMaxPosNP);
 	//IUSaveConfigNumber(fp, &FocusAbsPosNP);
