@@ -177,7 +177,7 @@ bool FpgaFocuser::Connect()
 	FocusBacklashPeriodN[0].max = FocusSpeedN[0].max;
 
   FocusMaxPosN[0].max = 0x3FFFFFFF;
-  SetFocuserMaxPosition(koheron_interface->GetGridPerRevolution());
+  //SetFocuserMaxPosition(koheron_interface->GetGridPerRevolution());
   //if (!hw_is_initialized)
   if (savePosition(-1) != -1)
   {
@@ -703,14 +703,14 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 	}
 
   bool dir = FocusAbsPosN[0].value < targetTicks;
-  if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusSpeedN[0].value/motorPeriodUs, reverse_direction ? !dir : dir))
+  if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusSpeedN[0].value/motorPeriodUs, dir))
   {
 		DEBUGF(INDI::Logger::DBG_WARNING, "%s: Failed to start motion", __func__);
 		return IPS_ALERT;
   }
   updateStatusFunc();
 	// update abspos value and status
-	DEBUGF(INDI::Logger::DBG_SESSION, "%s: Focuser motion started.", __func__);
+	DEBUGF(INDI::Logger::DBG_SESSION, "%s: Focuser motion started, target: %u, direction: %d.", __func__, targetTicks, dir);
 
 
 	// reset last temperature
@@ -723,7 +723,7 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 
 bool FpgaFocuser::ReverseFocuser(bool enabled)
 {
-  //reverse_direction = enabled;
+  reverse_direction = enabled;
 	if (enabled)
 	{
 		DEBUG(INDI::Logger::DBG_SESSION, "Reverse direction ENABLED.");
