@@ -134,7 +134,6 @@ class Skywatcher
         bool GetSnapPort1Status();
         bool GetSnapPort2Status();
 
-        bool setKoheronInfo(const char * ip, int port);
         void setPortFD(int value);
 
     private:
@@ -145,9 +144,6 @@ class Skywatcher
         static const char SkywatcherTrailingChar = 0x0d;
         static constexpr double MIN_RATE         = 0.05;
         static constexpr double MAX_RATE         = 800.0;
-        uint32_t minperiods[2];
-        uint32_t koheron_server_port;
-        std::string koheron_server_ip;
         //syslog_stream klog;
 
         // Types
@@ -287,6 +283,13 @@ class Skywatcher
 #ifndef _KOHERON
         bool read_eqmod();
         bool dispatch_command(SkywatcherCommand cmd, SkywatcherAxis axis, char *arg);
+#else
+        std::unique_ptr<ASCOM_sky_interface> koheron_interface;
+        bool setKoheronInfo(const char * ip, int port);
+
+        uint32_t koheron_server_port;
+        std::string koheron_server_ip;
+        uint32_t minperiods[2];
 #endif
 
         uint32_t Revu24str2long(char *);
@@ -355,5 +358,4 @@ class Skywatcher
 
         const uint8_t EQMOD_TIMEOUT = 5;
         const uint8_t EQMOD_MAX_RETRY = 3;
-        std::unique_ptr<ASCOM_sky_interface> koheron_interface;
 };

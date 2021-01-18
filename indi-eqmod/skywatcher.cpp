@@ -66,6 +66,7 @@ bool Skywatcher::setKoheronInfo(const char * ip, int port)
   }
   koheron_server_port = port;
   koheron_server_ip = ip;
+  LOGF_INFO("%s(): IP: %s, Port: %u", __func__, ip, port);
   return true;
 }
 
@@ -99,16 +100,19 @@ bool Skywatcher::Handshake()
 
 #ifdef _KOHERON
     try {
+        LOGF_INFO("%s(): Connecting to koheron", __func__);
         koheron_interface = std::make_unique<ASCOM_sky_interface>(koheron_server_ip.c_str(), koheron_server_port);
+        LOGF_INFO("%s(): Connection established", __func__);
     }
     catch (const std::exception& e)
     {
-                       DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s:%d %s"
+        DEBUGF(INDI::Logger::DBG_ERROR, "Could not connect to server: %s:%d %s"
             ,koheron_server_ip.c_str(), koheron_server_port, e.what());
                        return false;
     }
 
     MCVersion = koheron_interface->SwpGetBoardVersion();
+    LOGF_INFO("%s(): Board Version: %u", __func__, MCVersion);
 #else
     uint32_t tmpMCVersion = 0;
 
@@ -125,6 +129,7 @@ bool Skywatcher::Handshake()
         //return false;
     }
 #endif
+    LOGF_INFO("%s(): Exiting", __func__);
     return true;
 }
 
@@ -1404,7 +1409,7 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisSt
     if (!koheron_interface->SwpSetStepPeriod(axis, currentstatus->slewmode == SLEW, period ))
     {
         koheron_interface->print_error(__func__, " SwpSetStepPeriod: Axis");
-        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Pereiod: Axis%u", __func__, axis);
+        throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set Pereiod of %d: Axis%u", __func__, period, axis);
     }
 #else
     char cmd[7];
