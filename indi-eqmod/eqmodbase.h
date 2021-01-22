@@ -118,6 +118,25 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
         ISwitch AlignMethodS[2];
         ISwitchVectorProperty AlignMethodSP;
 #endif
+#ifdef _KOHERON
+
+	      ISwitch ServerDebugrS[2];
+	      ISwitchVectorProperty ServerDebugSP;
+	      ISwitch MotorTypeS[2];
+	      ISwitchVectorProperty MotorTypeSP;
+
+	      ISwitch ResetAbsPosS[1];
+	      ISwitchVectorProperty ResetAbsPosSP;
+
+	      INumber MinimumPeriodN[1];
+	      INumberVectorProperty MinimumPeriodNP;
+	      INumber MaximumPeriodN[1];
+	      INumberVectorProperty MaximumPeriodNP;
+	      INumber ModeN[1];
+	      INumberVectorProperty ModeNP;
+	      INumber StepsPerRotationN[1];
+	      INumberVectorProperty StepsPerRotationNP;
+#endif
 #if defined WITH_ALIGN || defined WITH_ALIGN_GEEHALEL
         ISwitchVectorProperty *AlignSyncModeSP = nullptr;
 #endif

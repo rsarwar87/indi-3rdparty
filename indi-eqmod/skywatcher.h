@@ -135,6 +135,10 @@ class Skywatcher
         bool GetSnapPort2Status();
 
         void setPortFD(int value);
+#ifdef _KOHERON
+        std::unique_ptr<ASCOM_sky_interface> koheron_interface;
+        bool setKoheronInfo(const char * ip, int port);
+#endif
 
     private:
         // Official Skywatcher Protocol
@@ -284,9 +288,6 @@ class Skywatcher
         bool read_eqmod();
         bool dispatch_command(SkywatcherCommand cmd, SkywatcherAxis axis, char *arg);
 #else
-        std::unique_ptr<ASCOM_sky_interface> koheron_interface;
-        bool setKoheronInfo(const char * ip, int port);
-
         uint32_t koheron_server_port;
         std::string koheron_server_ip;
         uint32_t minperiods[2];

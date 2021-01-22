@@ -463,6 +463,35 @@ bool EQMod::loadProperties()
     }
 #endif
 
+#ifdef _KOHERON
+
+  const char * KOHERON_TAB = "Koheron Settings";
+	// Compensate for temperature
+	IUFillSwitch(&ServerDebugrS[0], "Enable", "", ISS_OFF);
+	IUFillSwitch(&ServerDebugrS[1], "Disable", "", ISS_ON);
+	IUFillSwitchVector(&ServerDebugSP, ServerDebugrS, 2, getDeviceName(), "Enable SysLog Debugger in koheron server", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+	// Compensate for temperature
+	IUFillSwitch(&MotorTypeS[0], "DRV8825", "", ISS_ON);
+	IUFillSwitch(&MotorTypeS[1], "TMC2226", "", ISS_OFF);
+	IUFillSwitchVector(&MotorTypeSP, MotorTypeS, 2, getDeviceName(), "Switch between DRV8825 and TMC2226", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+
+	// Reset absolute possition
+	IUFillSwitch(&ResetAbsPosS[0],"RESET_ABS","ResetToToHome",ISS_OFF);
+	IUFillSwitchVector(&ResetAbsPosSP,ResetAbsPosS,1,getDeviceName(),"RESET_ABS_SW","Reset Position",KOHERON_TAB,IP_RW,ISR_1OFMANY,0,IPS_IDLE);
+  
+	// Minimum/Maximum Period
+	IUFillNumber(&MinimumPeriodN[0], "MIN_PERIOD_VALUE", "ticks", "%d", 5, 0xFFFFFFF, 1, 0);
+	IUFillNumberVector(&MinimumPeriodNP, MinimumPeriodN, 1, getDeviceName(), "MIN_PERIOD_VALUE", "Min Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumber(&MaximumPeriodN[0], "MAX_PERIOD_VALUE", "ticks", "%d", 5, 0xFFFFFFF, 1, 0);
+	IUFillNumberVector(&MaximumPeriodNP, MaximumPeriodN, 1, getDeviceName(), "MAX_PERIOD_VALUE", "Max Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumber(&ModeN[0], "MODE_VALUE", "", "%d", 0, 7, 1, 0);
+	IUFillNumberVector(&ModeNP, ModeN, 1, getDeviceName(), "MODE_VALUE", "Stepper Mode", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumber(&StepsPerRotationN[0], "STEPSPERROTATION_VALUE", "", "%d", 1, 0xFFFFFFFF, 1, 0);
+	IUFillNumberVector(&StepsPerRotationNP, StepsPerRotationN, 1, getDeviceName(), "STEPSPERROTATION_VALUE", "Steps per ROtation", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+
+#endif
+
+
     return true;
 }
 
@@ -502,6 +531,17 @@ bool EQMod::updateProperties()
         defineSwitch(TrackDefaultSP);
         defineSwitch(ST4GuideRateNSSP);
         defineSwitch(ST4GuideRateWESP);
+
+#ifdef _KOHERON
+		    defineSwitch(&ServerDebugSP);
+		    defineSwitch(&MotorTypeSP);
+		    defineSwitch(&ResetAbsPosSP);
+		    defineNumber(&MinimumPeriodNP);
+		    defineNumber(&MaximumPeriodNP);
+		    defineNumber(&ModeNP);
+		    defineNumber(&StepsPerRotationNP);
+
+#endif
 
 #if defined WITH_ALIGN && defined WITH_ALIGN_GEEHALEL
         defineSwitch(&AlignMethodSP);
@@ -699,6 +739,15 @@ bool EQMod::updateProperties()
 #endif
 #if defined WITH_ALIGN || defined WITH_ALIGN_GEEHALEL
         deleteProperty(AlignSyncModeSP->name);
+#endif
+#ifdef _KOHERON
+		deleteProperty(MotorTypeSP.name);
+		deleteProperty(ServerDebugSP.name);
+		deleteProperty(ResetAbsPosSP.name);
+		deleteProperty(MinimumPeriodNP.name);
+		deleteProperty(MaximumPeriodNP.name);
+		deleteProperty(ModeNP.name);
+		deleteProperty(StepsPerRotationNP.name);
 #endif
         //MountInformationTP=nullptr;
         //}
@@ -3200,6 +3249,53 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
             return true;
         }
 #endif
+
+#ifdef _KOHERON
+        if (!strcmp(name, MotorTypeSP.name))
+        {
+            IUUpdateSwitch(&MotorTypeSP, states, names, n);
+
+            if (MotorTypeS[0].s == ISS_ON)
+            {
+	              //koheron_interface->SetFocuserMotorType(false);
+                MotorTypeSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable DRV8825.");
+            }
+
+            if (MotorTypeS[1].s == ISS_ON)
+            {
+	              //koheron_interface->SetFocuserMotorType(true);
+                MotorTypeSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable TMC2226.");
+            }
+
+            IDSetSwitch(&MotorTypeSP, nullptr);
+            return true;
+        }
+        // handle temperature compensation
+        if (!strcmp(name, ServerDebugSP.name))
+        {
+            IUUpdateSwitch(&ServerDebugSP, states, names, n);
+
+            if (ServerDebugrS[0].s == ISS_ON)
+            {
+	              //koheron_interface->set_debug(true);
+                ServerDebugSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable Koheron server logging.");
+            }
+
+            if (ServerDebugrS[1].s == ISS_ON)
+            {
+	              //koheron_interface->set_debug(false);
+                ServerDebugSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Disable Koheron server logging.");
+            }
+
+            IDSetSwitch(&ServerDebugSP, nullptr);
+            return true;
+        }
+
+#endif
     }
 #ifdef WITH_ALIGN_GEEHALEL
     if (align)
@@ -3802,7 +3898,18 @@ bool EQMod::saveConfigItems(FILE *fp)
         IUSaveConfigSwitch(fp, RAPPECSP);
         IUSaveConfigSwitch(fp, DEPPECSP);
     }
+#ifdef _KOHERON
+	IUSaveConfigSwitch(fp, &ServerDebugSP);
+	IUSaveConfigSwitch(fp, &MotorTypeSP);
+	IUSaveConfigSwitch(fp, &ResetAbsPosSP);
 
+	// Minimum/Maximum Period
+  IUSaveConfigNumber(fp, &MinimumPeriodNP);
+  IUSaveConfigNumber(fp, &MaximumPeriodNP);
+  IUSaveConfigNumber(fp, &ModeNP);
+  IUSaveConfigNumber(fp, &StepsPerRotationNP);
+
+#endif
 #ifdef WITH_ALIGN_GEEHALEL
     if (align)
         align->saveConfigItems(fp);
