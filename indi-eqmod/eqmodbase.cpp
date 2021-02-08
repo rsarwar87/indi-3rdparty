@@ -476,25 +476,89 @@ bool EQMod::loadProperties()
 	IUFillSwitchVector(&MotorTypeSP, MotorTypeS, 2, getDeviceName(), "Switch between DRV8825 and TMC2226", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Reset absolute possition
-	IUFillSwitch(&ResetAbsPosS[0],"RESET_ABS","ResetToToHome",ISS_OFF);
+	IUFillSwitch(&ResetAbsPosS[0],"RESET_ABS","SetToPark",ISS_OFF);
 	IUFillSwitchVector(&ResetAbsPosSP,ResetAbsPosS,1,getDeviceName(),"RESET_ABS_SW","Reset Position",KOHERON_TAB,IP_RW,ISR_1OFMANY,0,IPS_IDLE);
+	// Reset absolute possition
+	IUFillSwitch(&RetrieveValsS[0],"RETDEV_VAL","Retrieve",ISS_OFF);
+	IUFillSwitchVector(&RetrieveValSP,RetrieveValsS,1,getDeviceName(),"RETDEV_VAL_SW","Retrieve Device Values",KOHERON_TAB,IP_RW,ISR_1OFMANY,0,IPS_IDLE);
+
+	IUFillSwitch(&SaveDeviceS[0],"SAVDEV_VAL","Save on Device",ISS_ON);
+	IUFillSwitch(&SaveDeviceS[1],"RESTORE_VAL","Copy from Device",ISS_ON);
+	IUFillSwitch(&SaveDeviceS[2],"SEND_VAL","Send to Device",ISS_ON);
+	IUFillSwitchVector(&SaveDeviceeValSP,SaveDeviceS,3,getDeviceName(),"SAVE_DEV_VAL","Load Device Settings at Startup (only works if not initialized already)",KOHERON_TAB,IP_RW,ISR_1OFMANY,0,IPS_IDLE);
   
 	// Minimum/Maximum Period
-	IUFillNumber(&MinimumPeriodN[0], "MIN_PERIOD_VALUE", "ticks", "%d", 5, 0xFFFFFFF, 1, 0);
+	IUFillNumber(&MinimumPeriodN[0], "MIN_PERIOD_VALUE", "usec", "%.2f", 5, 0xFFFFFFF, 1, 15);
 	IUFillNumberVector(&MinimumPeriodNP, MinimumPeriodN, 1, getDeviceName(), "MIN_PERIOD_VALUE", "Min Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
-	IUFillNumber(&MaximumPeriodN[0], "MAX_PERIOD_VALUE", "ticks", "%d", 5, 0xFFFFFFF, 1, 0);
+	IUFillNumber(&MaximumPeriodN[0], "MAX_PERIOD_VALUE", "usec", "%.2f", 5, 0xFFFFFFF, 1, 268435);
 	IUFillNumberVector(&MaximumPeriodNP, MaximumPeriodN, 1, getDeviceName(), "MAX_PERIOD_VALUE", "Max Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
-	IUFillNumber(&ModeN[0], "MODE_VALUE", "", "%d", 0, 7, 1, 0);
+	IUFillNumber(&ModeN[0], "MODE_VALUE", "ticks", "%.0f", 0, 7, 1, 7);
 	IUFillNumberVector(&ModeNP, ModeN, 1, getDeviceName(), "MODE_VALUE", "Stepper Mode", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
-	IUFillNumber(&StepsPerRotationN[0], "STEPSPERROTATION_VALUE", "", "%d", 1, 0xFFFFFFFF, 1, 0);
-	IUFillNumberVector(&StepsPerRotationNP, StepsPerRotationN, 1, getDeviceName(), "STEPSPERROTATION_VALUE", "Steps per ROtation", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
 
+	IUFillNumber(&StepsPerRotationN[1], "STEPPERUSTEP_VALUE", "MicroSteps", "%.0f", 1, 255, 1, 32);
+	IUFillNumber(&StepsPerRotationN[2], "HIGHGEAR_VALUE", "High gear teeths", "%.0f", 1, 255, 1, 60);
+	IUFillNumber(&StepsPerRotationN[3], "LOWGEAR_VALUE", "Low gear teeths", "%.0f", 1, 255, 1, 12);
+	IUFillNumber(&StepsPerRotationN[4], "MOUNTGEAR_VALUE", "Mount gear rotation", "%.0f", 1, 255, 1, 144);
+	IUFillNumber(&StepsPerRotationN[0], "STEPPERTICKS_VALUE", "Ticks/stepper rotation", "%.0f", 1, 255, 1, 200);
+	IUFillNumberVector(&StepsPerRotationNP, StepsPerRotationN, 5, getDeviceName(), "STEPSPERROTATION_VALUE", "Steps per Rotation", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+
+	IUFillNumber(&DeviceValN[0], "MIN_PERIOD", "Min period usec", "%.2f", 5, 0xFFFFFFF, 1, 15);
+	IUFillNumber(&DeviceValN[1], "MAX_PERIOD", "Max period usec", "%.2f", 5, 0xFFFFFFF, 1, 268435);
+	IUFillNumber(&DeviceValN[2], "MODE", "Mode", "%.0f", 0, 7, 1, 0);
+	IUFillNumber(&DeviceValN[3], "STEPSPERROT_VALUE", "Steps per Rotation", "%.0f", 1, 0xFFFFFFFF, 1, 200*5*32*144);
+	IUFillNumber(&DeviceValN[4], "SMICRO_VALUE", "MicroSteps", "%.0f", 1, 255, 1, 32);
+	IUFillNumber(&DeviceValN[5], "HG_VALUE", "High gear teeths", "%.0f", 1, 255, 1, 60);
+	IUFillNumber(&DeviceValN[6], "LG_VALUE", "Low gear teeths", "%.0f", 1, 255, 1, 12);
+	IUFillNumber(&DeviceValN[7], "MG_VALUE", "Mount gear teeth", "%.0f", 1, 255, 1, 144);
+	IUFillNumber(&DeviceValN[8], "SR_VALUE", "Ticks/stepper rotation", "%.0f", 1, 255, 1, 200);
+	IUFillNumber(&DeviceValN[9], "DRIVER_VALUE", "1=TMC, 0=DRV", "%1.0f", 0, 1, 1, 0);
+	IUFillNumberVector(&DeviceValNP, DeviceValN, 10, getDeviceName(), "DEVICE_VALUE", "DeviceValues", KOHERON_TAB, IP_RO, 0, IPS_IDLE);
 #endif
 
 
     return true;
 }
 
+#ifdef _KOHERON
+void EQMod::KoheronReadSettings(bool over)
+{
+    if (!isConnected() && !over)
+    {
+      LOGF_INFO("%s Device not connected.", __func__);
+      return;
+    }
+    LOGF_INFO("%s Called.", __func__);
+	  DeviceValNP.s=IPS_BUSY;
+    IDSetNumber(&DeviceValNP, nullptr);
+    DeviceValN[0].value = mount->koheron_interface->get_minimum_period_usec(0);
+    DeviceValN[1].value = mount->koheron_interface->get_maximum_period_usec(0);
+    DeviceValN[2].value = mount->koheron_interface->get_motor_mode(0, true);
+    DeviceValN[3].value = mount->koheron_interface->SwpGetGridPerRevolution(0);
+    std::array<uint32_t, 5> ret_p = mount->koheron_interface->get_steps_per_rotation_params(0);
+    DeviceValN[4].value = ret_p[0];
+    DeviceValN[5].value = ret_p[3];
+    DeviceValN[6].value = ret_p[4];
+    DeviceValN[7].value = ret_p[2];
+    DeviceValN[8].value = ret_p[1];
+    DeviceValN[9].value = mount->koheron_interface->SwpGetMotorType(0) ? 1 : 0;
+
+    MinimumPeriodN[0].value = DeviceValN[0].value;
+    MaximumPeriodN[1].value = DeviceValN[1].value;
+    ModeN[0].value = DeviceValN[2].value;
+    StepsPerRotationN[0].value = ret_p[1];
+    StepsPerRotationN[1].value = ret_p[0];
+    StepsPerRotationN[2].value = ret_p[3];
+    StepsPerRotationN[3].value = ret_p[4];
+    StepsPerRotationN[4].value = ret_p[2];
+	  DeviceValNP.s=IPS_OK;
+    IDSetNumber(&DeviceValNP, nullptr);
+    return;
+}
+
+void EQMod::KoheronSendSettings(uint8_t type)
+{
+}
+#endif
 bool EQMod::updateProperties()
 {
     INumber *latitude;
@@ -505,6 +569,7 @@ bool EQMod::updateProperties()
 
     if (isConnected())
     {
+        LOGF_INFO("%s triggered.", __func__);
         defineNumber(&GuideNSNP);
         defineNumber(&GuideWENP);
         defineNumber(SlewSpeedsNP);
@@ -535,11 +600,14 @@ bool EQMod::updateProperties()
 #ifdef _KOHERON
 		    defineSwitch(&ServerDebugSP);
 		    defineSwitch(&MotorTypeSP);
+		    defineSwitch(&SaveDeviceeValSP);
+		    defineSwitch(&RetrieveValSP);
 		    defineSwitch(&ResetAbsPosSP);
 		    defineNumber(&MinimumPeriodNP);
 		    defineNumber(&MaximumPeriodNP);
 		    defineNumber(&ModeNP);
 		    defineNumber(&StepsPerRotationNP);
+		    defineNumber(&DeviceValNP);
 
 #endif
 
@@ -748,6 +816,9 @@ bool EQMod::updateProperties()
 		deleteProperty(MaximumPeriodNP.name);
 		deleteProperty(ModeNP.name);
 		deleteProperty(StepsPerRotationNP.name);
+		deleteProperty(DeviceValNP.name);
+		deleteProperty(RetrieveValSP.name);
+		deleteProperty(SaveDeviceeValSP.name);
 #endif
         //MountInformationTP=nullptr;
         //}
@@ -792,6 +863,9 @@ bool EQMod::Handshake()
         mount->setPortFD(PortFD);
 #endif
         mount->Handshake();
+#ifdef _KOHERON
+        KoheronReadSettings(true);
+#endif
         // Mount initialisation is in updateProperties as it sets directly Indi properties which should be defined
     }
     catch (EQModError e)
@@ -2607,6 +2681,63 @@ bool EQMod::ISNewNumber(const char *dev, const char *name, double values[], char
         //  This is for our device
         //  Now lets see if it's something we process here
 
+#ifdef _KOHERON
+        if (!strcmp(name, MaximumPeriodNP.name))
+        {
+            IUUpdateNumber(&MaximumPeriodNP, values, names, n);
+            mount->koheron_interface->set_maximum_period_usec(0, MaximumPeriodN[0].value);
+            mount->koheron_interface->set_maximum_period_usec(1, MaximumPeriodN[0].value);
+            mount->koheron_interface->set_maximum_period_usec(2, MaximumPeriodN[0].value);
+            LOGF_INFO("%s Setting max period to %u.", __func__, MaximumPeriodN[0].value);
+            KoheronReadSettings();
+            MaximumPeriodNP.s = IPS_OK;
+            IDSetNumber(&MaximumPeriodNP, nullptr);
+            return true;
+        }
+        if (!strcmp(name, MinimumPeriodNP.name))
+        {
+            IUUpdateNumber(&MinimumPeriodNP, values, names, n);
+            mount->koheron_interface->set_minimum_period_usec(0, MinimumPeriodN[0].value);
+            mount->koheron_interface->set_minimum_period_usec(1, MinimumPeriodN[0].value);
+            mount->koheron_interface->set_minimum_period_usec(2, MinimumPeriodN[0].value);
+            LOGF_INFO("%s Setting min period to %u.", __func__, MinimumPeriodN[0].value);
+            mount->UpdateMinPeriod();
+            KoheronReadSettings();
+            MinimumPeriodNP.s = IPS_OK;
+            IDSetNumber(&MinimumPeriodNP, nullptr);
+            return true;
+        }
+        if (!strcmp(name, ModeNP.name))
+        {
+            IUUpdateNumber(&ModeNP, values, names, n);
+            //mount->koheron_interface->set_motor_mode(0, 0, ModeN[0].value);
+            //mount->koheron_interface->set_motor_mode(1, 0, ModeN[0].value);
+            //mount->koheron_interface->set_motor_mode(2, 0, ModeN[0].value);
+            //mount->koheron_interface->set_motor_mode(0, 1, ModeN[0].value);
+            //mount->koheron_interface->set_motor_mode(1, 1, ModeN[0].value);
+            //mount->koheron_interface->set_motor_mode(2, 1, ModeN[0].value);
+
+            KoheronReadSettings();
+            ModeNP.s = IPS_OK;
+            IDSetNumber(&ModeNP, nullptr);
+            return true;
+        }
+        if (!strcmp(name, StepsPerRotationNP.name))
+        {
+            IUUpdateNumber(&StepsPerRotationNP, values, names, n);
+                mount->koheron_interface->set_steps_per_rotation_params(1, StepsPerRotationN[0].value
+                    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
+                    , StepsPerRotationN[2].value);
+                mount->koheron_interface->set_steps_per_rotation_params(0, StepsPerRotationN[0].value
+                    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
+                    , StepsPerRotationN[2].value);
+            KoheronReadSettings();
+            StepsPerRotationNP.s = IPS_OK;
+            IDSetNumber(&StepsPerRotationNP, nullptr);
+            return true;
+        }
+#endif
+
         if (strcmp(name, "SLEWSPEEDS") == 0)
         {
             /* TODO: don't change speed in gotos gotoparams.inprogress... */
@@ -3251,21 +3382,107 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
 #endif
 
 #ifdef _KOHERON
+        
+        if (!strcmp(name, SaveDeviceeValSP.name))
+        {
+            IUUpdateSwitch(&SaveDeviceeValSP, states, names, n);
+
+            if (SaveDeviceS[0].s == ISS_ON)
+            {
+	              mount->koheron_interface->save_config();
+                KoheronReadSettings();
+                SaveDeviceS[1].s = ISS_ON;
+                LOG_INFO("Koheron device setting saved.");
+                IDSetSwitch(&SaveDeviceeValSP, nullptr);
+            }
+            if (SaveDeviceS[1].s == ISS_ON)
+            {
+	              mount->koheron_interface->save_config();
+                KoheronReadSettings();
+                //MinimumPeriodN[0].value = DeviceValN[0].value;
+                //MaximumPeriodN[1].value = DeviceValN[1].value;
+                //ModeN[0].value = DeviceValN[2].value;
+                //if (DeviceValN[9].value == 1)
+                //{
+                //  MotorTypeS[0].s = ISS_OFF;
+                //  MotorTypeS[1].s = ISS_ON;
+                //}
+                //else
+                //{
+                //  MotorTypeS[0].s = ISS_ON;
+                //  MotorTypeS[1].s = ISS_OFF;
+                //}
+                //StepsPerRotationN[0].value = DeviceValN[8].value; //ret_p[1];
+                //StepsPerRotationN[1].value = DeviceValN[4].value; //ret_p[0];
+                //StepsPerRotationN[2].value = DeviceValN[5].value; //ret_p[3];
+                //StepsPerRotationN[3].value = DeviceValN[6].value; //ret_p[4];
+                //StepsPerRotationN[4].value = DeviceValN[7].value; //ret_p[2];
+                SaveDeviceS[1].s = ISS_ON;
+                LOG_INFO("Restored current values from device values.");
+                IDSetSwitch(&SaveDeviceeValSP, nullptr);
+            }
+            if (SaveDeviceS[2].s == ISS_ON)
+            {
+                //if (MotorTypeS[0].s == ISS_ON)
+                //{
+	              //    mount->koheron_interface->SwpSetMotorType(0, false);
+	              //    mount->koheron_interface->SwpSetMotorType(1, false);
+	              //    mount->koheron_interface->SwpSetMotorType(2, false);
+                //    MotorTypeSP.s = IPS_OK;
+                //    DEBUG(INDI::Logger::DBG_SESSION, "Enable DRV8825.");
+                //}
+
+                //if (MotorTypeS[1].s == ISS_ON)
+                //{
+	              //    mount->koheron_interface->SwpSetMotorType(0, true);
+	              //    mount->koheron_interface->SwpSetMotorType(1, true);
+	              //    mount->koheron_interface->SwpSetMotorType(2, true);
+                //    MotorTypeSP.s = IPS_OK;
+                //    DEBUG(INDI::Logger::DBG_SESSION, "Enable TMC2226.");
+                //}
+
+                //mount->koheron_interface->set_motor_mode(0, 0, ModeN[0].value);
+                //mount->koheron_interface->set_motor_mode(1, 0, ModeN[0].value);
+                //mount->koheron_interface->set_motor_mode(2, 0, ModeN[0].value);
+                //mount->koheron_interface->set_motor_mode(0, 1, ModeN[0].value);
+                //mount->koheron_interface->set_motor_mode(1, 1, ModeN[0].value);
+                //mount->koheron_interface->set_motor_mode(2, 1, ModeN[0].value);
+                //mount->koheron_interface->set_steps_per_rotation_params(1, StepsPerRotationN[0].value
+                //    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
+                //    , StepsPerRotationN[2].value);
+                //mount->koheron_interface->set_steps_per_rotation_params(0, StepsPerRotationN[0].value
+                //    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
+                //    , StepsPerRotationN[2].value);
+
+                
+                KoheronReadSettings();
+                SaveDeviceS[1].s = ISS_ON;
+                LOG_INFO("Sent new settings for koheron device.");
+            }
+            ServerDebugSP.s = IPS_IDLE;
+            IDSetSwitch(&ServerDebugSP, nullptr);
+
+            return true;
+        }
         if (!strcmp(name, MotorTypeSP.name))
         {
             IUUpdateSwitch(&MotorTypeSP, states, names, n);
 
             if (MotorTypeS[0].s == ISS_ON)
             {
-	              //koheron_interface->SetFocuserMotorType(false);
+	              mount->koheron_interface->SwpSetMotorType(0, false);
+	              mount->koheron_interface->SwpSetMotorType(1, false);
+	              //mount->koheron_interface->SwpSetMotorType(2, false);
                 MotorTypeSP.s = IPS_OK;
                 DEBUG(INDI::Logger::DBG_SESSION, "Enable DRV8825.");
             }
 
             if (MotorTypeS[1].s == ISS_ON)
             {
-	              //koheron_interface->SetFocuserMotorType(true);
-                MotorTypeSP.s = IPS_IDLE;
+	              mount->koheron_interface->SwpSetMotorType(0, true);
+	              mount->koheron_interface->SwpSetMotorType(1, true);
+	              //mount->koheron_interface->SwpSetMotorType(2, true);
+                MotorTypeSP.s = IPS_OK;
                 DEBUG(INDI::Logger::DBG_SESSION, "Enable TMC2226.");
             }
 
@@ -3279,19 +3496,38 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
 
             if (ServerDebugrS[0].s == ISS_ON)
             {
-	              //koheron_interface->set_debug(true);
+	              mount->koheron_interface->set_debug(true);
                 ServerDebugSP.s = IPS_OK;
                 DEBUG(INDI::Logger::DBG_SESSION, "Enable Koheron server logging.");
             }
 
             if (ServerDebugrS[1].s == ISS_ON)
             {
-	              //koheron_interface->set_debug(false);
+	              mount->koheron_interface->set_debug(false);
                 ServerDebugSP.s = IPS_IDLE;
                 DEBUG(INDI::Logger::DBG_SESSION, "Disable Koheron server logging.");
             }
 
             IDSetSwitch(&ServerDebugSP, nullptr);
+            return true;
+        }
+        if (!strcmp(name, ResetAbsPosSP.name))
+        {
+            //IUUpdateSwitch(&RetrieveValSP, states, names, n);
+            LOGF_INFO("Setting Park Position: %u %u", GetAxis1Park(), GetAxis2Park());
+            mount->koheron_interface->SwpSetAxisPosition(0, GetAxis1Park());
+            mount->koheron_interface->SwpSetAxisPosition(1, GetAxis2Park());
+            ResetAbsPosS[0].s = ISS_OFF;
+            IDSetSwitch(&ResetAbsPosSP, nullptr);
+            return true;
+        }
+        if (!strcmp(name, RetrieveValSP.name))
+        {
+            //IUUpdateSwitch(&RetrieveValSP, states, names, n);
+	          mount->koheron_interface->set_debug(true);
+            KoheronReadSettings();
+            RetrieveValsS[0].s = ISS_OFF;
+            IDSetSwitch(&RetrieveValSP, nullptr);
             return true;
         }
 
@@ -3907,7 +4143,7 @@ bool EQMod::saveConfigItems(FILE *fp)
   IUSaveConfigNumber(fp, &MinimumPeriodNP);
   IUSaveConfigNumber(fp, &MaximumPeriodNP);
   IUSaveConfigNumber(fp, &ModeNP);
-  IUSaveConfigNumber(fp, &StepsPerRotationNP);
+  //IUSaveConfigNumber(fp, &StepsPerRotationNP);
 
 #endif
 #ifdef WITH_ALIGN_GEEHALEL

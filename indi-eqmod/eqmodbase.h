@@ -125,6 +125,10 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
 	      ISwitch MotorTypeS[2];
 	      ISwitchVectorProperty MotorTypeSP;
 
+	      ISwitch SaveDeviceS[3];
+	      ISwitchVectorProperty SaveDeviceeValSP;
+	      ISwitch RetrieveValsS[1];
+	      ISwitchVectorProperty RetrieveValSP;
 	      ISwitch ResetAbsPosS[1];
 	      ISwitchVectorProperty ResetAbsPosSP;
 
@@ -134,8 +138,14 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
 	      INumberVectorProperty MaximumPeriodNP;
 	      INumber ModeN[1];
 	      INumberVectorProperty ModeNP;
-	      INumber StepsPerRotationN[1];
+	      INumber StepsPerRotationN[6];
 	      INumberVectorProperty StepsPerRotationNP;
+
+	      INumberVectorProperty DeviceValNP;
+	      INumber DeviceValN[10];
+
+        void KoheronReadSettings(bool over = false);
+        void KoheronSendSettings(uint8_t type = 0);
 #endif
 #if defined WITH_ALIGN || defined WITH_ALIGN_GEEHALEL
         ISwitchVectorProperty *AlignSyncModeSP = nullptr;
