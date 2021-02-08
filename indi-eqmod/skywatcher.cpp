@@ -501,6 +501,14 @@ void Skywatcher::Init()
     }
 }
 
+#ifdef _KOHERON
+void Skywatcher::UpdateMinPeriod()
+{
+    minperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) ;
+    minperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) ;
+}
+#endif
+
 void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
 {
     unsigned nprop             = 0;
@@ -517,8 +525,7 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     MountCode=MCVersion & 0xFF;
     */
 #ifdef _KOHERON
-    minperiods[Axis1] = koheron_interface->get_minimum_period(Axis1) ;
-    minperiods[Axis2] = koheron_interface->get_minimum_period(Axis2) ;
+    UpdateMinPeriod();
 #else
     minperiods[Axis1] = 6;
     minperiods[Axis2] = 6;
@@ -862,7 +869,7 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
             RAInitialized      = response[0];
             RARunning          = response[1];
             RAStatus.direction = (response[2]) ? FORWARD : BACKWARD;
-            RAStatus.speedmode = (response[3]) ? HIGHSPEED : LOWSPEED;
+            RAStatus.speedmode = LOWSPEED;//(response[3]) ? HIGHSPEED : LOWSPEED;
             RAStatus.slewmode = SLEW;
             if (response[5])
                 RAStatus.slewmode = SLEW;
@@ -873,7 +880,7 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
             DEInitialized      = response[0];
             DERunning          = response[1];
             DEStatus.direction = (response[2]) ? FORWARD : BACKWARD;
-            DEStatus.speedmode = (response[3]) ? HIGHSPEED : LOWSPEED;
+            DEStatus.speedmode = LOWSPEED; //(response[3]) ? HIGHSPEED : LOWSPEED;
             DEStatus.slewmode = SLEW;
             if (response[5])
                 DEStatus.slewmode = SLEW;
@@ -948,7 +955,7 @@ void Skywatcher::SlewRA(double rate)
                          "Speed rate out of limits: %.2fx Sidereal (min=%.2f, max=%.2f)", absrate, MIN_RATE, MAX_RATE);
     }
     //if (MountCode != 0xF0) {
-    if (absrate > SKYWATCHER_LOWSPEED_RATE)
+    if (absrate > SKYWATCHER_LOWSPEED_RATE && RAHighspeedRatio > 1)
     {
         absrate      = absrate / RAHighspeedRatio;
         useHighspeed = true;
@@ -1007,7 +1014,7 @@ void Skywatcher::SlewDE(double rate)
                          "Speed rate out of limits: %.2fx Sidereal (min=%.2f, max=%.2f)", absrate, MIN_RATE, MAX_RATE);
     }
     //if (MountCode != 0xF0) {
-    if (absrate > SKYWATCHER_LOWSPEED_RATE)
+    if (absrate > SKYWATCHER_LOWSPEED_RATE && DEHighspeedRatio > 1)
     {
         absrate      = absrate / DEHighspeedRatio;
         useHighspeed = true;
@@ -1225,7 +1232,7 @@ void Skywatcher::SetRARate(double rate)
                          "Speed rate out of limits: %.2fx Sidereal (min=%.2f, max=%.2f)", absrate, MIN_RATE, MAX_RATE);
     }
     //if (MountCode != 0xF0) {
-    if (absrate > SKYWATCHER_LOWSPEED_RATE)
+    if (absrate > SKYWATCHER_LOWSPEED_RATE && RAHighspeedRatio > 1)
     {
         absrate      = absrate / RAHighspeedRatio;
         useHighspeed = true;
@@ -1275,7 +1282,7 @@ void Skywatcher::SetDERate(double rate)
                          "Speed rate out of limits: %.2fx Sidereal (min=%.2f, max=%.2f)", absrate, MIN_RATE, MAX_RATE);
     }
     //if (MountCode != 0xF0) {
-    if (absrate > SKYWATCHER_LOWSPEED_RATE)
+    if (absrate > SKYWATCHER_LOWSPEED_RATE && DEHighspeedRatio > 1)
     {
         absrate      = absrate / DEHighspeedRatio;
         useHighspeed = true;
