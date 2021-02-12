@@ -186,6 +186,7 @@ bool FpgaFocuser::Connect()
     {
 			DEBUG(INDI::Logger::DBG_WARNING, "Discarding stored AbsPosition as it is greater"
           "than FocusAbsPosN.max");
+      FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
     }
     else
     {
@@ -197,7 +198,7 @@ bool FpgaFocuser::Connect()
   else
   {
 			DEBUG(INDI::Logger::DBG_WARNING, "FocusAbsPosN not found, retreiving ..");
-	  FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
+	    FocusAbsPosN[0].value = koheron_interface->GetFocuserPosition();
   }
 
 	updateStatusID = IEAddTimer(STATUS_UPDATE_TIMEOUT, updateStatusHelper, this);
