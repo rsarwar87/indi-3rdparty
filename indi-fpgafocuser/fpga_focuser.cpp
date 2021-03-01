@@ -753,21 +753,22 @@ IPState FpgaFocuser::MoveAbsFocuser(int targetTicks)
 		return IPS_ALERT;
 	}
 
-	if (targetTicks == FocusAbsPosN[0].value)
+  int tmp  = FocusAbsPosN[0].value;
+	if (targetTicks == tmp)
 	{
 		DEBUG(INDI::Logger::DBG_SESSION, "Already at the requested position.");
 		return IPS_OK;
 	}
 
-  bool dir = FocusAbsPosN[0].value < targetTicks;
+  bool dir = tmp < targetTicks;
   if (!koheron_interface->FocuserGotoTarget(targetTicks, FocusSpeedN[0].value/motorPeriodUs, dir))
   {
 		DEBUGF(INDI::Logger::DBG_WARNING, "%s: Failed to start motion", __func__);
 		return IPS_ALERT;
   }
-  updateStatusFunc();
 	// update abspos value and status
-	DEBUGF(INDI::Logger::DBG_SESSION, "%s: Focuser motion started, target: %u, direction: %d.", __func__, targetTicks, dir);
+	DEBUGF(INDI::Logger::DBG_SESSION, "%s: Focuser motion started, current: %0.0f, target: %d, direction: %s.", __func__, FocusAbsPosN[0].value, targetTicks, dir ? "true" : "false");
+  updateStatusFunc();
 
 
 	// reset last temperature
