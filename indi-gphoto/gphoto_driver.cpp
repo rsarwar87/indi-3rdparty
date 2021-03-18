@@ -1078,15 +1078,19 @@ int gphoto_mirrorlock(gphoto_driver *gphoto, int msec)
        usleep(150000);
        gphoto->fpgatrigger->close_shutter();
        usleep(msec * 1000);
+      
+       return 0;
     }
 #endif
     if (gphoto->pitrigger)
     {
-            DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using Pi Trigger to open mirror...");
-            gphoto->pitrigger->open_shutter();
-            usleep(150000);
-            gphoto->pitrigger->close_shutter();
-            usleep(msec * 1000);
+       DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using Pi Trigger to open mirror...");
+       gphoto->pitrigger->open_shutter();
+       usleep(150000);
+       gphoto->pitrigger->close_shutter();
+       usleep(msec * 1000);
+      
+       return 0;
     }
     if (gphoto->bulb_port[0])
     {
