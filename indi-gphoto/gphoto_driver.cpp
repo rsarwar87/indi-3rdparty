@@ -1070,7 +1070,28 @@ int gphoto_mirrorlock(gphoto_driver *gphoto, int msec)
 
         return 0;
     }
-
+#ifdef _KOHERON
+    if (gphoto->fpgatrigger)
+    {
+       DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using FPGA Trigger to open mirror...");
+       gphoto->fpgatrigger->open_shutter();
+       usleep(150000);
+       gphoto->fpgatrigger->close_shutter();
+       usleep(msec * 1000);
+      
+       return 0;
+    }
+#endif
+    if (gphoto->pitrigger)
+    {
+       DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Using Pi Trigger to open mirror...");
+       gphoto->pitrigger->open_shutter();
+       usleep(150000);
+       gphoto->pitrigger->close_shutter();
+       usleep(msec * 1000);
+      
+       return 0;
+    }
     if (gphoto->bulb_port[0])
     {
         DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "Locking mirror by opening remote serial shutter port: %s ...",
@@ -1212,12 +1233,7 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
         // If we have mirror lock enabled, let's lock mirror. Return on failure
         if (mirror_lock)
         {
-            if (gphoto->dsusb 
-               || gphoto->pitrigger
-#ifdef _KOHERON
-               || gphoto->fpgatrigger
-#endif
-                 )
+            if (gphoto->dsusb)
             {
                 DEBUGDEVICE(device, INDI::Logger::DBG_ERROR, "Using mirror lock with DSUSB/KoheronFPGATrigger is unsupported!");
                 return -1;

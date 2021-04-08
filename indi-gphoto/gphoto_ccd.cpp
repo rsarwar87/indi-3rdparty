@@ -533,8 +533,12 @@ bool GPhotoCCD::updateProperties()
         {
             ShowExtendedOptions();
 
+#ifdef _KOHERON
+            defineNumber(&mMirrorLockNP);
+#else
             if (strstr(gphoto_get_manufacturer(gphotodrv), "Canon"))
                 defineNumber(&mMirrorLockNP);
+#endif
         }
 
         if (isSimulation())
