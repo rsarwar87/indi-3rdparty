@@ -414,9 +414,9 @@ bool LX200StarGo::initProperties()
     IUFillTextVector(&MountFirmwareInfoTP, MountFirmwareInfoT, 1, getDeviceName(), "MOUNT_INFO", "Mount Info", INFO_TAB, IP_RO, 60, IPS_OK);
 
     // Guiding settings
-    IUFillNumber(&GuidingSpeedP[0], "GUIDING_SPEED_RA", "RA Speed", "%.2f", 0.0, 2.0, 0.1, 0);
-    IUFillNumber(&GuidingSpeedP[1], "GUIDING_SPEED_DEC", "DEC Speed", "%.2f", 0.0, 2.0, 0.1, 0);
-    IUFillNumberVector(&GuidingSpeedNP, GuidingSpeedP, 2, getDeviceName(), "GUIDING_SPEED", "Autoguiding", RA_DEC_TAB, IP_RW, 60, IPS_IDLE);
+    IUFillNumber(&GuidingSpeedP[0], "GUIDE_RATE_WE", "RA Speed", "%.2f", 0.0, 2.0, 0.1, 0);
+    IUFillNumber(&GuidingSpeedP[1], "GUIDE_RATE_NS", "DEC Speed", "%.2f", 0.0, 2.0, 0.1, 0);
+    IUFillNumberVector(&GuidingSpeedNP, GuidingSpeedP, 2, getDeviceName(), "GUIDE_RATE", "Autoguiding", RA_DEC_TAB, IP_RW, 60, IPS_IDLE);
 
     IUFillSwitch(&ST4StatusS[0], "ST4_DISABLED", "disabled", ISS_OFF);
     IUFillSwitch(&ST4StatusS[1], "ST4_ENABLED", "enabled", ISS_ON);
@@ -462,18 +462,18 @@ bool LX200StarGo::updateProperties()
     if (! LX200Telescope::updateProperties()) return false;
     if (isConnected())
     {
-        defineSwitch(&Aux1FocuserSP);
-        defineSwitch(&SyncHomeSP);
-        defineSwitch(&MountGotoHomeSP);
-        defineSwitch(&MountSetParkSP);
-        defineNumber(&GuidingSpeedNP);
-        defineSwitch(&ST4StatusSP);
-        defineSwitch(&KeypadStatusSP);
-        defineSwitch(&SystemSpeedSlewSP);
-        defineNumber(&TrackingAdjustmentNP);
-        defineSwitch(&MeridianFlipModeSP);
-        defineNumber(&MountRequestDelayNP);
-        defineText(&MountFirmwareInfoTP);
+        defineProperty(&Aux1FocuserSP);
+        defineProperty(&SyncHomeSP);
+        defineProperty(&MountGotoHomeSP);
+        defineProperty(&MountSetParkSP);
+        defineProperty(&GuidingSpeedNP);
+        defineProperty(&ST4StatusSP);
+        defineProperty(&KeypadStatusSP);
+        defineProperty(&SystemSpeedSlewSP);
+        defineProperty(&TrackingAdjustmentNP);
+        defineProperty(&MeridianFlipModeSP);
+        defineProperty(&MountRequestDelayNP);
+        defineProperty(&MountFirmwareInfoTP);
     }
     else
     {
@@ -2396,38 +2396,38 @@ void LX200StarGo::ISGetProperties(const char *dev)
     if (isConnected())
     {
         if (HasTrackMode() && TrackModeS != nullptr)
-            defineSwitch(&TrackModeSP);
+            defineProperty(&TrackModeSP);
         if (CanControlTrack())
-            defineSwitch(&TrackStateSP);
+            defineProperty(&TrackStateSP);
         //        if (HasTrackRate())
-        //            defineNumber(&TrackRateNP);
+        //            defineProperty(&TrackRateNP);
     }
     /*
         if (isConnected())
         {
             if (genericCapability & LX200_HAS_ALIGNMENT_TYPE)
-                defineSwitch(&AlignmentSP);
+                defineProperty(&AlignmentSP);
 
             if (genericCapability & LX200_HAS_TRACKING_FREQ)
-                defineNumber(&TrackingFreqNP);
+                defineProperty(&TrackingFreqNP);
 
             if (genericCapability & LX200_HAS_PULSE_GUIDING)
-                defineSwitch(&UsePulseCmdSP);
+                defineProperty(&UsePulseCmdSP);
 
             if (genericCapability & LX200_HAS_SITES)
             {
-                defineSwitch(&SiteSP);
-                defineText(&SiteNameTP);
+                defineProperty(&SiteSP);
+                defineProperty(&SiteNameTP);
             }
 
-            defineNumber(&GuideNSNP);
-            defineNumber(&GuideWENP);
+            defineProperty(&GuideNSNP);
+            defineProperty(&GuideWENP);
 
             if (genericCapability & LX200_HAS_FOCUS)
             {
-                defineSwitch(&FocusMotionSP);
-                defineNumber(&FocusTimerNP);
-                defineSwitch(&FocusModeSP);
+                defineProperty(&FocusMotionSP);
+                defineProperty(&FocusTimerNP);
+                defineProperty(&FocusModeSP);
             }
         }
         */

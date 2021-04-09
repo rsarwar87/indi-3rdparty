@@ -145,7 +145,6 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
 	      INumber DeviceValN[10];
 
         void KoheronReadSettings(bool over = false);
-        void KoheronSendSettings(uint8_t type = 0);
 #endif
 #if defined WITH_ALIGN || defined WITH_ALIGN_GEEHALEL
         ISwitchVectorProperty *AlignSyncModeSP = nullptr;

@@ -295,6 +295,10 @@ bool ASIWHEEL::initProperties()
     IUFillSwitchVector(&UniDirectionalSP, UniDirectionalS, 2, getDeviceName(), "FILTER_UNIDIRECTIONAL_MOTION", "Uni Direction",
                        MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
+    IUFillSwitch(&CalibrateS[0], "CALIBRATE", "Calibrate", ISS_OFF);
+    IUFillSwitchVector(&CalibrateSP, CalibrateS, 1, getDeviceName(), "FILTER_CALIBRATION", "Calibrate",
+                       MAIN_CONTROL_TAB, IP_RW, ISR_ATMOST1, 0, IPS_IDLE);
+
     addAuxControls();
     setDefaultPollingPeriod(250);
     return true;
@@ -312,10 +316,14 @@ bool ASIWHEEL::updateProperties()
             UniDirectionalS[INDI_ENABLED].s = isUniDirection ? ISS_ON : ISS_OFF;
             UniDirectionalS[INDI_DISABLED].s = isUniDirection ? ISS_OFF : ISS_ON;
         }
-        defineSwitch(&UniDirectionalSP);
+        defineProperty(&UniDirectionalSP);
+        defineProperty(&CalibrateSP);
     }
     else
+    {
         deleteProperty(UniDirectionalSP.name);
+        deleteProperty(CalibrateSP.name);
+    }
 
     return true;
 }
@@ -340,6 +348,42 @@ bool ASIWHEEL::ISNewSwitch(const char *dev, const char *name, ISState *states, c
             }
             IDSetSwitch(&UniDirectionalSP, nullptr);
             return true;
+        }
+        if (!strcmp(name, CalibrateSP.name))
+        {
+            CalibrateS[0].s = ISS_OFF;
+
+            if (isSimulation())
+            {
+                return true;
+            }
+
+            CalibrateSP.s   = IPS_BUSY;
+            IDSetSwitch(&CalibrateSP, nullptr);
+
+            // make the set filter number busy
+            FilterSlotNP.s = IPS_BUSY;
+            IDSetNumber(&FilterSlotNP, nullptr);
+
+            LOGF_DEBUG("Calibrating EFW %d", fw_id);
+            EFW_ERROR_CODE rc = EFWCalibrate(fw_id);
+
+            if (rc == EFW_SUCCESS)
+            {
+                IEAddTimer(getCurrentPollingPeriod(), ASIWHEEL::TimerHelperCalibrate, this);
+                return true;
+            }
+            else
+            {
+                LOGF_ERROR("%(): EFWCalibrate = %d", __FUNCTION__, rc);
+                CalibrateSP.s = IPS_ALERT;
+                IDSetSwitch(&CalibrateSP, nullptr);
+
+                // reset filter slot state
+                FilterSlotNP.s = IPS_OK;
+                IDSetNumber(&FilterSlotNP, nullptr);
+                return false;
+            }
         }
     }
 
@@ -386,12 +430,12 @@ bool ASIWHEEL::SelectFilter(int f)
         result = EFWSetPosition(fw_id, f - 1);
         if (result == EFW_SUCCESS)
         {
-            SetTimer(POLLMS);
+            SetTimer(getCurrentPollingPeriod());
             do
             {
                 result = EFWGetPosition(fw_id, &CurrentFilter);
                 CurrentFilter++;
-                usleep(POLLMS * 1000);
+                usleep(getCurrentPollingPeriod() * 1000);
             }
             while (result == EFW_SUCCESS && CurrentFilter != TargetFilter);
             if (result != EFW_SUCCESS)
@@ -420,7 +464,7 @@ void ASIWHEEL::TimerHit()
 
     if (CurrentFilter != TargetFilter)
     {
-        SetTimer(POLLMS);
+        SetTimer(getCurrentPollingPeriod());
     }
     else
     {
@@ -433,4 +477,39 @@ bool ASIWHEEL::saveConfigItems(FILE *fp)
     INDI::FilterWheel::saveConfigItems(fp);
     IUSaveConfigSwitch(fp, &UniDirectionalSP);
     return true;
+}
+
+void ASIWHEEL::TimerHelperCalibrate(void *context)
+{
+    static_cast<ASIWHEEL*>(context)->TimerCalibrate();
+}
+
+void ASIWHEEL::TimerCalibrate()
+{
+    // check current state of calibration
+    int position;
+    EFW_ERROR_CODE rc = EFWGetPosition(fw_id, &position);
+
+    if (rc == EFW_SUCCESS)
+    {
+        if (position == EFW_IS_MOVING)
+        {
+            // while filterwheel is moving we're still calibrating
+            IEAddTimer(getCurrentPollingPeriod(), ASIWHEEL::TimerHelperCalibrate, this);
+            return;
+        }
+        LOGF_DEBUG("Successfully calibrated EFW %d", fw_id);
+        CalibrateSP.s   = IPS_OK;
+        IDSetSwitch(&CalibrateSP, nullptr);
+    }
+    else
+    {
+        LOGF_ERROR("%(): EFWCalibrate = %d", __FUNCTION__, rc);
+        CalibrateSP.s = IPS_ALERT;
+        IDSetSwitch(&CalibrateSP, nullptr);
+    }
+
+    FilterSlotNP.s = IPS_OK;
+    IDSetNumber(&FilterSlotNP, nullptr);
+    return;
 }

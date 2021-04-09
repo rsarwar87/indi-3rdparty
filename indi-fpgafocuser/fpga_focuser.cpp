@@ -329,23 +329,23 @@ bool FpgaFocuser::updateProperties()
 
 	if (isConnected())
 	{
-		defineText(&ActiveTelescopeTP);
-		defineNumber(&FocuserTravelNP);
-		defineSwitch(&FocusMotionSP);
-		defineNumber(&FocuserInfoNP);
-		defineNumber(&FocusBacklashPeriodNP);
-		defineSwitch(&ResetAbsPosSP);
-		defineSwitch(&ServerDebugSP);
-		defineSwitch(&MotorTypeSP);
+		defineProperty(&ActiveTelescopeTP);
+		defineProperty(&FocuserTravelNP);
+		defineProperty(&FocusMotionSP);
+		defineProperty(&FocuserInfoNP);
+		defineProperty(&FocusBacklashPeriodNP);
+		defineProperty(&ResetAbsPosSP);
+		defineProperty(&ServerDebugSP);
+		defineProperty(&MotorTypeSP);
 
 		IDSnoopDevice(ActiveTelescopeT[0].text, "TELESCOPE_INFO");
 
 		if (readtemp())
 		{
-			defineNumber(&FocusTemperatureNP);
-			defineNumber(&TemperatureCoefNP);
-			defineSwitch(&TemperatureCompensateSP);
-			defineSwitch(&TemperatureSensorSP);
+			defineProperty(&FocusTemperatureNP);
+			defineProperty(&TemperatureCoefNP);
+			defineProperty(&TemperatureCompensateSP);
+			defineProperty(&TemperatureSensorSP);
 			readtemp(); // update immediately
 			lastTemperature = FocusTemperatureN[0].value; // init last temperature
 			IERmTimer(updateTemperatureID);
