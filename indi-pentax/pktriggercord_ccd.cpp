@@ -20,6 +20,7 @@
 
 #include "pktriggercord_ccd.h"
 #include "pslr.h"
+#include <indimacros.h>
 
 #define MINISO 100
 #define MAXISO 102400
@@ -105,13 +106,13 @@ bool PkTriggerCordCCD::updateProperties()
 
         buildCaptureSwitches();
 
-        defineSwitch(&transferFormatSP);
-        defineSwitch(&autoFocusSP);
+        defineProperty(&transferFormatSP);
+        defineProperty(&autoFocusSP);
         if (transferFormatS[0].s == ISS_ON) {
-            defineSwitch(&preserveOriginalSP);
+            defineProperty(&preserveOriginalSP);
         }
 
-        timerID = SetTimer(POLLMS);
+        timerID = SetTimer(getCurrentPollingPeriod());
     }
     else
     {
@@ -205,7 +206,7 @@ void PkTriggerCordCCD::buildCaptureSettingSwitch(ISwitchVectorProperty *control,
         IUFillSwitchVector(control, create_switch(name, optionList, numOptions, set_idx),
                            numOptions, getDeviceName(), name, label,
                            IMAGE_SETTINGS_TAB, IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
-        defineSwitch(control);
+        defineProperty(control);
     }
 }
 
@@ -217,12 +218,12 @@ bool PkTriggerCordCCD::Connect()
         LOG_ERROR("Cannot connect to Pentax camera.");
         return false;
     }
-    int r;
-    if (r=pslr_connect(device)) {
-        if ( r != -1 ) {
-            LOG_ERROR("Cannot connect to Pentax camera.");
-        } else {
+    int r = pslr_connect(device);
+    if (r != 0) {
+        if ( r == -1 ) {
             LOG_ERROR("Unknown Pentax camera found.");
+        } else {
+            LOG_ERROR("Cannot connect to Pentax camera.");
         }
         return false;
     }
@@ -496,6 +497,7 @@ void PkTriggerCordCCD::TimerHit()
         std::chrono::milliseconds span (100);
         if ( shutter_result.wait_for(span)!=std::future_status::timeout) {
             bool result = shutter_result.get();
+            INDI_UNUSED(result);
             InDownload = false;
             InExposure = false;
 
@@ -507,7 +509,7 @@ void PkTriggerCordCCD::TimerHit()
     }
 
     if (timerID == -1)
-        SetTimer(POLLMS);
+        SetTimer(getCurrentPollingPeriod());
     return;
 }
 
@@ -612,7 +614,11 @@ bool PkTriggerCordCCD::grabImage()
 
         PrimaryCCD.setFrameBufferSize(size);
         char * memptr = (char *)PrimaryCCD.getFrameBuffer();
-        fread(memptr, sizeof(char), size, f);
+        size_t readSize = fread(memptr, sizeof(char), size, f);
+        if (readSize != size)
+        {
+            LOGF_ERROR("Error, %u bytes of data read instead of %u.", readSize, size);
+        }
         PrimaryCCD.setFrameBuffer((unsigned char *)memptr);
         fclose(f);
 		LOG_DEBUG("Copied to frame buffer.  Leaving temp file for debug purposes.");
@@ -660,7 +666,7 @@ bool PkTriggerCordCCD::ISNewSwitch(const char * dev, const char * name, ISState 
         transferFormatSP.s = IPS_OK;
         IDSetSwitch(&transferFormatSP, nullptr);
         if (transferFormatS[0].s == ISS_ON) {
-            defineSwitch(&preserveOriginalSP);
+            defineProperty(&preserveOriginalSP);
         } else {
             deleteProperty(preserveOriginalSP.name);
         }
@@ -689,7 +695,7 @@ bool PkTriggerCordCCD::ISNewSwitch(const char * dev, const char * name, ISState 
     else if (!strcmp(name, mWhiteBalanceSP.name)) {
         updateCaptureSettingSwitch(&mWhiteBalanceSP,states,names,n);
         pslr_white_balance_mode_t white_balance_mode = get_pslr_white_balance_mode(IUFindOnSwitch(&mWhiteBalanceSP)->label);
-        if ( white_balance_mode == -1 ) {
+        if ( int(white_balance_mode) == -1 ) {
             LOG_WARN("Could not set desired white balance: Invalid setting for current camera mode.");
         }
         else {

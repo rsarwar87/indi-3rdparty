@@ -198,7 +198,7 @@ bool LIMESDR::Connect()
     LOG_INFO("LIME-SDR Spectrograph connected successfully!");
     // Let's set a timer that checks teleSpectrographs status every POLLMS milliseconds.
     // JM 2017-07-31 SetTimer already called in updateProperties(). Just call it once
-    //SetTimer(POLLMS);
+    //SetTimer(getCurrentPollingPeriod());
 
     return true;
 }
@@ -272,10 +272,10 @@ bool LIMESDR::updateProperties()
     {
         // Inital values
         setupParams(1000000, 1420000000, 10000, 10);
-        //defineBLOB(&TFitsBP);
+        //defineProperty(&TFitsBP);
 
         // Start the timer
-        SetTimer(POLLMS);
+        SetTimer(getCurrentPollingPeriod());
     }
     else
     {
@@ -288,7 +288,7 @@ bool LIMESDR::updateProperties()
 /**************************************************************************************
 ** Client is asking us to start an exposure
 ***************************************************************************************/
-bool LIMESDR::StartIntegration(float duration)
+bool LIMESDR::StartIntegration(double duration)
 {
     IntegrationRequest = duration;
 
@@ -428,7 +428,7 @@ void LIMESDR::TimerHit()
         setIntegrationLeft(timeleft);
     }
 
-    SetTimer(POLLMS);
+    SetTimer(getCurrentPollingPeriod());
     return;
 }
 

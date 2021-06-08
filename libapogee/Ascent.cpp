@@ -20,6 +20,8 @@
 #include "ImgFix.h"
 #include "ApgTimer.h"
 #include "ApgLogger.h" 
+#include "indimacros.h"
+
 #include <sstream>
 
 namespace
@@ -770,6 +772,9 @@ void Ascent::SetFanMode( const Apg::FanMode mode, const bool PreCondCheck )
 #ifdef DEBUGGING_CAMERA
     apgHelper::DebugMsg( "Ascent::SetFanMode -> mode = %d, PreCondCheck =%d ", 
         mode, PreCondCheck );
+#else
+    INDI_UNUSED(mode);
+    INDI_UNUSED(PreCondCheck);
 #endif
     // no op on purpose, no fan control for ascent based cameras
     // just ignore request...

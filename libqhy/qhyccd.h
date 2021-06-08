@@ -229,6 +229,7 @@ EXPORTC uint32_t STDCALL GetQHYCCDSingleFrame(qhyccd_handle *handle,uint32_t *w,
 
 /**
   @fn uint32_t CancelQHYCCDExposing(qhyccd_handle *handle)
+  @brief force stop the camera long exposure. But host software must readout the image data. Please note not all camera can use this method.
   @param handle camera control handle
   @return
   on success,return QHYCCD_SUCCESS \n
@@ -238,7 +239,7 @@ EXPORTC uint32_t STDCALL CancelQHYCCDExposing(qhyccd_handle *handle);
 
 /**
   @fn uint32_t CancelQHYCCDExposingAndReadout(qhyccd_handle *handle)
-  @brief stop the camera exposing and readout
+  @brief force stop the camera long exposure. And also camera does not send back the image data. Host software must not readout the data. All camera support this mode. 
   @param handle camera control handle
   @return
   on success,return QHYCCD_SUCCESS \n
@@ -246,24 +247,25 @@ EXPORTC uint32_t STDCALL CancelQHYCCDExposing(qhyccd_handle *handle);
   */
 EXPORTC uint32_t STDCALL CancelQHYCCDExposingAndReadout(qhyccd_handle *handle);
 
-/** \fn uint32_t BeginQHYCCDLive(qhyccd_handle *handle)
-      \brief start continue exposing
-	  \param handle camera control handle
-	  \return
-	  on success,return QHYCCD_SUCCESS \n
-	  another QHYCCD_ERROR code on other failures
+/** 
+  @fn uint32_t BeginQHYCCDLive(qhyccd_handle *handle)
+  @brief in live video mode, start continue exposing. Only need to start once before StopQHYCCDLive.
+	@param handle camera control handle
+  @return
+	on success,return QHYCCD_SUCCESS \n
+	another QHYCCD_ERROR code on other failures
   */
 EXPORTC uint32_t STDCALL BeginQHYCCDLive(qhyccd_handle *handle);
 
 /**
-      @fn uint32_t GetQHYCCDLiveFrame(qhyccd_handle *handle,uint32_t *w,uint32_t *h,uint32_t *bpp,uint32_t *channels,uint8_t *imgdata)
-      @brief get live frame data from camera
+    @fn uint32_t GetQHYCCDLiveFrame(qhyccd_handle *handle,uint32_t *w,uint32_t *h,uint32_t *bpp,uint32_t *channels,uint8_t *imgdata)
+    @brief get live frame data from camera
 	  @param handle camera control handle
 	  @param *w pointer to width of ouput image
 	  @param *h pointer to height of ouput image
-      @param *bpp pointer to depth of ouput image
-      @param *channels pointer to channels of ouput image
-      @param *imgdata image data buffer
+    @param *bpp pointer to depth of ouput image
+    @param *channels pointer to channels of ouput image
+    @param *imgdata image data buffer
 	  @return
 	  on success,return QHYCCD_SUCCESS \n
 	  QHYCCD_ERROR_GETTINGFAILED,if get data failed \n
@@ -796,6 +798,27 @@ EXPORTC uint32_t STDCALL SetQHYCCDTwoChannelCombineParameter(qhyccd_handle *hand
 
 EXPORTC uint32_t STDCALL EnableQHYCCDImageOSD(qhyccd_handle *h,uint32_t i);
 
+/**
+  @fn uint32_t GetQHYCCDPreciseExposureInfo(qhyccd_handle *h,
+                                            uint32_t *PixelPeriod_ps,
+                                            uint32_t *LinePeriod_ns,
+                                            uint32_t *FramePeriod_us,
+                                            uint32_t *ClocksPerLine,
+                                            uint32_t *LinesPerFrame,
+                                            uint32_t *ActualExposureTime,
+                                            uint8_t  *isLongExposureMode);
+  @brief get the sensor precise timing data from camera. These data can be used for high precise GPS time calculation 
+  @param h camera control handle
+  @param PixelPeriod_ps return pixel period, unit is ps \n
+  @param LinePeriod_ns return row period, unit is ns \n
+  @param FramePeriod_us return frame period, unit is us \n 
+  @param ClocksPerLine return how many clocks per line \n 
+  @param LinesPerFrame return how many rows per frame. Please note this maybe not the picture y size. \n   
+  @param ActualExposureTime return actual exposure time. most cmos exposure is row based. So the exposure time is n*row period. It maybe has a little difference with the set value. \n   
+  @param isLongExposureMode return if camera works in long exposure mode. For cmos camera. When exposure time > frame period. It will add the verical blanking rows. in this case it is long exposure mode \n     
+  @return QHYCCD_SUCCESS or QHYCCD_ERROR. If the camera does not support this function, it will return QHYCCD_ERROR \n
+
+*/
 EXPORTC uint32_t STDCALL GetQHYCCDPreciseExposureInfo(qhyccd_handle *h,
                                                          uint32_t *PixelPeriod_ps,
                                                          uint32_t *LinePeriod_ns,
@@ -804,6 +827,20 @@ EXPORTC uint32_t STDCALL GetQHYCCDPreciseExposureInfo(qhyccd_handle *h,
                                                          uint32_t *LinesPerFrame,
                                                          uint32_t *ActualExposureTime,
                                                          uint8_t  *isLongExposureMode);
+
+
+
+
+/**
+  @fn uint32_t GetQHYCCDRollingShutterEndOffset(qhyccd_handle *h,uint32_t row,uint32_t *offset);   
+  @brief for rolling shutter camera with GPS meassurement signal output or with GPSBOX connection. it will output the meassurement pulse. But the pulse is not at the exactly time of the \n
+         the exposure time. This api will return the calibrated data of the offset value from GPS meassurement pulse to the end of exposure time of certain row. 
+  @param h camera control handle \n
+  @param row the shutter status \n
+  @param offset the shutter offset value from shutter meassure signal falling edge (gps messured end exposure) . unit us \n
+  @return QHYCCD_SUCCESS or QHYCCD_ERROR. If the camera does not support this function, it will return QHYCCD_ERROR \n
+*/
+EXPORTFUNC uint32_t STDCALL GetQHYCCDRollingShutterEndOffset(qhyccd_handle *h,uint32_t row,double *offset);                                                        
 
 
 EXPORTC void STDCALL QHYCCDQuit();
@@ -881,3 +918,5 @@ EXPORTC void STDCALL QHYCCD_fpga_reset();
 /// ----------------------------------
 
 void call_pnp_event();
+void call_data_event_live(char *id, uint8_t *imgdata);
+void call_transfer_event_error();

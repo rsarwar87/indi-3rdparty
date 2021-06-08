@@ -224,13 +224,13 @@ bool LX200StarGo::ISNewSwitch(const char *dev, const char *name, ISState *states
         }
         else if (!strcmp(name, ST4StatusSP.name))
         {
-            bool enabled = (states[0] == ISS_OFF);
+            bool enabled = !strcmp(IUFindOnSwitchName(states, names, n), ST4StatusS[INDI_ENABLED].name);
             bool result = setST4Enabled(enabled);
 
             if(result)
             {
-                ST4StatusS[0].s = enabled ? ISS_OFF : ISS_ON;
-                ST4StatusS[1].s = enabled ? ISS_ON : ISS_OFF;
+                ST4StatusS[INDI_ENABLED].s = enabled ? ISS_ON : ISS_OFF;
+                ST4StatusS[INDI_DISABLED].s = enabled ? ISS_OFF : ISS_ON;
                 ST4StatusSP.s = IPS_OK;
             }
             else
@@ -242,13 +242,13 @@ bool LX200StarGo::ISNewSwitch(const char *dev, const char *name, ISState *states
         }
         else if (!strcmp(name, KeypadStatusSP.name))
         {
-            bool enabled = (states[0] == ISS_OFF);
+            bool enabled = !strcmp(IUFindOnSwitchName(states, names, n), KeypadStatusS[INDI_ENABLED].name);
             bool result = setKeyPadEnabled(enabled);
 
             if(result)
             {
-                KeypadStatusS[0].s = enabled ? ISS_OFF : ISS_ON;
-                KeypadStatusS[1].s = enabled ? ISS_ON : ISS_OFF;
+                KeypadStatusS[INDI_ENABLED].s = enabled ? ISS_ON : ISS_OFF;
+                KeypadStatusS[INDI_DISABLED].s = enabled ? ISS_OFF : ISS_ON;
                 KeypadStatusSP.s = IPS_OK;
             }
             else
@@ -355,17 +355,19 @@ bool LX200StarGo::ISNewNumber(const char *dev, const char *name, double values[]
             }
             IDSetNumber(&GuidingSpeedNP, nullptr);
             return result;
-        } else if (!strcmp(name, MountRequestDelayNP.name))
+        }
+        else if (!strcmp(name, MountRequestDelayNP.name))
         {
             int secs   = static_cast<int>(floor(values[0] / 1000.0));
             long nsecs = static_cast<long>(round((values[0] - 1000.0 * secs) * 1000000.0));
             setMountRequestDelay(secs, nsecs);
 
-            MountRequestDelayN[0].value = secs*1000 + nsecs/1000000;
+            MountRequestDelayN[0].value = secs * 1000 + nsecs / 1000000;
             MountRequestDelayNP.s = IPS_OK;
             IDSetNumber(&MountRequestDelayNP, nullptr);
             return true;
-        } else if (!strcmp(name, TrackingAdjustmentNP.name))
+        }
+        else if (!strcmp(name, TrackingAdjustmentNP.name))
         {
             // changing tracking adjustment
             bool success = setTrackingAdjustment(values[0]);
@@ -398,55 +400,66 @@ bool LX200StarGo::initProperties()
 
     IUFillSwitch(&Aux1FocuserS[0], "AUX1_FOCUSER_ON", "On", ISS_OFF);
     IUFillSwitch(&Aux1FocuserS[1], "AUX1_FOCUSER_OFF", "Off", ISS_ON);
-    IUFillSwitchVector(&Aux1FocuserSP, Aux1FocuserS, 2, getDeviceName(), "AUX1_FOCUSER_CONTROL", "AUX1 Focuser", MAIN_CONTROL_TAB, IP_RW, ISR_ATMOST1, 60, IPS_IDLE);
+    IUFillSwitchVector(&Aux1FocuserSP, Aux1FocuserS, 2, getDeviceName(), "AUX1_FOCUSER_CONTROL", "AUX1 Focuser",
+                       MAIN_CONTROL_TAB, IP_RW, ISR_ATMOST1, 60, IPS_IDLE);
 
     IUFillSwitch(&MountGotoHomeS[0], "MOUNT_GOTO_HOME_VALUE", "Goto Home", ISS_OFF);
-    IUFillSwitchVector(&MountGotoHomeSP, MountGotoHomeS, 1, getDeviceName(), "MOUNT_GOTO_HOME", "Goto Home", MAIN_CONTROL_TAB, IP_RW, ISR_ATMOST1, 60, IPS_OK);
+    IUFillSwitchVector(&MountGotoHomeSP, MountGotoHomeS, 1, getDeviceName(), "MOUNT_GOTO_HOME", "Goto Home", MAIN_CONTROL_TAB,
+                       IP_RW, ISR_ATMOST1, 60, IPS_OK);
 
     IUFillSwitch(&MountSetParkS[0], "MOUNT_SET_PARK_VALUE", "Set Park", ISS_OFF);
-    IUFillSwitchVector(&MountSetParkSP, MountSetParkS, 1, getDeviceName(), "MOUNT_SET_PARK", "Set Park", MAIN_CONTROL_TAB, IP_RW, ISR_ATMOST1, 60, IPS_OK);
+    IUFillSwitchVector(&MountSetParkSP, MountSetParkS, 1, getDeviceName(), "MOUNT_SET_PARK", "Set Park", MAIN_CONTROL_TAB,
+                       IP_RW, ISR_ATMOST1, 60, IPS_OK);
 
     IUFillSwitch(&SyncHomeS[0], "SYNC_HOME", "Sync Home", ISS_OFF);
     IUFillSwitchVector(&SyncHomeSP, SyncHomeS, 1, getDeviceName(), "TELESCOPE_SYNC_HOME", "Home Position", MAIN_CONTROL_TAB,
                        IP_RW, ISR_ATMOST1, 60, IPS_IDLE);
 
     IUFillText(&MountFirmwareInfoT[0], "MOUNT_FIRMWARE_INFO", "Firmware", "");
-    IUFillTextVector(&MountFirmwareInfoTP, MountFirmwareInfoT, 1, getDeviceName(), "MOUNT_INFO", "Mount Info", INFO_TAB, IP_RO, 60, IPS_OK);
+    IUFillTextVector(&MountFirmwareInfoTP, MountFirmwareInfoT, 1, getDeviceName(), "MOUNT_INFO", "Mount Info", INFO_TAB, IP_RO,
+                     60, IPS_OK);
 
     // Guiding settings
-    IUFillNumber(&GuidingSpeedP[0], "GUIDING_SPEED_RA", "RA Speed", "%.2f", 0.0, 2.0, 0.1, 0);
-    IUFillNumber(&GuidingSpeedP[1], "GUIDING_SPEED_DEC", "DEC Speed", "%.2f", 0.0, 2.0, 0.1, 0);
-    IUFillNumberVector(&GuidingSpeedNP, GuidingSpeedP, 2, getDeviceName(), "GUIDING_SPEED", "Autoguiding", RA_DEC_TAB, IP_RW, 60, IPS_IDLE);
+    IUFillNumber(&GuidingSpeedP[0], "GUIDE_RATE_WE", "RA Speed", "%.2f", 0.0, 2.0, 0.1, 0);
+    IUFillNumber(&GuidingSpeedP[1], "GUIDE_RATE_NS", "DEC Speed", "%.2f", 0.0, 2.0, 0.1, 0);
+    IUFillNumberVector(&GuidingSpeedNP, GuidingSpeedP, 2, getDeviceName(), "GUIDE_RATE", "Autoguiding", RA_DEC_TAB, IP_RW, 60,
+                       IPS_IDLE);
 
-    IUFillSwitch(&ST4StatusS[0], "ST4_DISABLED", "disabled", ISS_OFF);
-    IUFillSwitch(&ST4StatusS[1], "ST4_ENABLED", "enabled", ISS_ON);
-    IUFillSwitchVector(&ST4StatusSP, ST4StatusS, 2, getDeviceName(), "ST4", "ST4", RA_DEC_TAB, IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
+    IUFillSwitch(&ST4StatusS[INDI_ENABLED], "INDI_ENABLED", "Enabled", ISS_ON);
+    IUFillSwitch(&ST4StatusS[INDI_DISABLED], "INDI_DISABLED", "Disabled", ISS_OFF);
+    IUFillSwitchVector(&ST4StatusSP, ST4StatusS, 2, getDeviceName(), "ST4", "ST4", RA_DEC_TAB, IP_RW, ISR_1OFMANY, 60,
+                       IPS_IDLE);
 
     // keypad enabled / disabled
-    IUFillSwitch(&KeypadStatusS[0], "KEYPAD_DISABLED", "disabled", ISS_OFF);
-    IUFillSwitch(&KeypadStatusS[1], "KEYPAD_ENABLED", "enabled", ISS_ON);
-    IUFillSwitchVector(&KeypadStatusSP, KeypadStatusS, 2, getDeviceName(), "Keypad", "Keypad", RA_DEC_TAB, IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
+    IUFillSwitch(&KeypadStatusS[INDI_ENABLED], "INDI_ENABLED", "Enabled", ISS_ON);
+    IUFillSwitch(&KeypadStatusS[INDI_DISABLED], "INDI_DISABLED", "Disabled", ISS_OFF);
+    IUFillSwitchVector(&KeypadStatusSP, KeypadStatusS, 2, getDeviceName(), "Keypad", "Keypad", RA_DEC_TAB, IP_RW, ISR_1OFMANY,
+                       60, IPS_IDLE);
 
     // System speed: Slew
     IUFillSwitch(&SystemSpeedSlewS[0], "SYSTEM_SLEW_SPEED_LOW", "low", ISS_OFF);
     IUFillSwitch(&SystemSpeedSlewS[1], "SYSTEM_SLEW_SPEED_MEDIUM", "medium", ISS_OFF);
     IUFillSwitch(&SystemSpeedSlewS[2], "SYSTEM_SLEW_SPEED_FAST", "fast", ISS_ON);
     IUFillSwitch(&SystemSpeedSlewS[3], "SYSTEM_SLEW_SPEED_HIGH", "high", ISS_OFF);
-    IUFillSwitchVector(&SystemSpeedSlewSP, SystemSpeedSlewS, 4, getDeviceName(), "SYSTEM_SLEW_SPEED", "Slew Speed", RA_DEC_TAB, IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
+    IUFillSwitchVector(&SystemSpeedSlewSP, SystemSpeedSlewS, 4, getDeviceName(), "SYSTEM_SLEW_SPEED", "Slew Speed", RA_DEC_TAB,
+                       IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
     // Tracking adjustment
     IUFillNumber(&TrackingAdjustment[0], "ADJUSTMENT_RA", "Adj. (max +/- 5%)", "%.2f", -5.0, 5.0, 0.01, 0.0);
-    IUFillNumberVector(&TrackingAdjustmentNP, TrackingAdjustment, 1, getDeviceName(), "TRACKING_ADJUSTMENT", "Tracking", RA_DEC_TAB, IP_RW, 60.0, IPS_IDLE);
+    IUFillNumberVector(&TrackingAdjustmentNP, TrackingAdjustment, 1, getDeviceName(), "TRACKING_ADJUSTMENT", "Tracking",
+                       RA_DEC_TAB, IP_RW, 60.0, IPS_IDLE);
 
     // meridian flip
     IUFillSwitch(&MeridianFlipModeS[0], "MERIDIAN_FLIP_AUTO", "auto", ISS_OFF);
     IUFillSwitch(&MeridianFlipModeS[1], "MERIDIAN_FLIP_DISABLED", "disabled", ISS_OFF);
     IUFillSwitch(&MeridianFlipModeS[2], "MERIDIAN_FLIP_FORCED", "forced", ISS_OFF);
-    IUFillSwitchVector(&MeridianFlipModeSP, MeridianFlipModeS, 3, getDeviceName(), "MERIDIAN_FLIP_MODE", "Meridian Flip", RA_DEC_TAB, IP_RW, ISR_ATMOST1, 60, IPS_IDLE);
+    IUFillSwitchVector(&MeridianFlipModeSP, MeridianFlipModeS, 3, getDeviceName(), "MERIDIAN_FLIP_MODE", "Meridian Flip",
+                       RA_DEC_TAB, IP_RW, ISR_ATMOST1, 60, IPS_IDLE);
 
     // mount command delay
     IUFillNumber(&MountRequestDelayN[0], "MOUNT_REQUEST_DELAY", "Request Delay (ms)", "%.0f", 0.0, 1000, 1.0, 50.0);
-    IUFillNumberVector(&MountRequestDelayNP, MountRequestDelayN, 1, getDeviceName(), "REQUEST_DELAY", "StarGO", RA_DEC_TAB, IP_RW, 60, IPS_OK);
+    IUFillNumberVector(&MountRequestDelayNP, MountRequestDelayN, 1, getDeviceName(), "REQUEST_DELAY", "StarGO", RA_DEC_TAB,
+                       IP_RW, 60, IPS_OK);
 
     // focuser on AUX1 port
     focuserAux1->initProperties("AUX1 Focuser");
@@ -462,18 +475,18 @@ bool LX200StarGo::updateProperties()
     if (! LX200Telescope::updateProperties()) return false;
     if (isConnected())
     {
-        defineSwitch(&Aux1FocuserSP);
-        defineSwitch(&SyncHomeSP);
-        defineSwitch(&MountGotoHomeSP);
-        defineSwitch(&MountSetParkSP);
-        defineNumber(&GuidingSpeedNP);
-        defineSwitch(&ST4StatusSP);
-        defineSwitch(&KeypadStatusSP);
-        defineSwitch(&SystemSpeedSlewSP);
-        defineNumber(&TrackingAdjustmentNP);
-        defineSwitch(&MeridianFlipModeSP);
-        defineNumber(&MountRequestDelayNP);
-        defineText(&MountFirmwareInfoTP);
+        defineProperty(&Aux1FocuserSP);
+        defineProperty(&SyncHomeSP);
+        defineProperty(&MountGotoHomeSP);
+        defineProperty(&MountSetParkSP);
+        defineProperty(&GuidingSpeedNP);
+        defineProperty(&ST4StatusSP);
+        defineProperty(&KeypadStatusSP);
+        defineProperty(&SystemSpeedSlewSP);
+        defineProperty(&TrackingAdjustmentNP);
+        defineProperty(&MeridianFlipModeSP);
+        defineProperty(&MountRequestDelayNP);
+        defineProperty(&MountFirmwareInfoTP);
     }
     else
     {
@@ -720,7 +733,7 @@ void LX200StarGo::getBasicData()
             if (! getTrackFrequency(&TrackFreqN[0].value))
                 LOG_ERROR("Failed to get tracking frequency from device.");
             else
-                IDSetNumber(&TrackingFreqNP, nullptr);
+                IDSetNumber(&TrackFreqNP, nullptr);
         }
         MountFirmwareInfoT[0].text = new char[64];
         if (!getFirmwareInfo(MountFirmwareInfoT[0].text))
@@ -742,8 +755,8 @@ void LX200StarGo::getBasicData()
         bool isEnabled;
         if (getST4Status(&isEnabled))
         {
-            ST4StatusS[0].s = isEnabled ? ISS_OFF : ISS_ON;
-            ST4StatusS[1].s = isEnabled ? ISS_ON : ISS_OFF;
+            ST4StatusS[INDI_ENABLED].s = isEnabled ? ISS_ON : ISS_OFF;
+            ST4StatusS[INDI_DISABLED].s = isEnabled ? ISS_OFF : ISS_ON;
             ST4StatusSP.s = IPS_OK;
         }
         else
@@ -765,8 +778,8 @@ void LX200StarGo::getBasicData()
 
         if (getKeypadStatus(&isEnabled))
         {
-            KeypadStatusS[0].s = isEnabled ? ISS_OFF : ISS_ON;
-            KeypadStatusS[1].s = isEnabled ? ISS_ON : ISS_OFF;
+            KeypadStatusS[INDI_ENABLED].s = isEnabled ? ISS_ON : ISS_OFF;
+            KeypadStatusS[INDI_DISABLED].s = isEnabled ? ISS_OFF : ISS_ON;
             KeypadStatusSP.s = IPS_OK;
         }
         else
@@ -883,7 +896,8 @@ bool LX200StarGo::sendScopeLocation()
     LocationNP.np[LOCATION_LATITUDE].value = siteLat;
     LocationNP.np[LOCATION_LONGITUDE].value = siteLong;
 
-    LOGF_DEBUG("Mount Controller Latitude: %lg Longitude: %lg", LocationN[LOCATION_LATITUDE].value, LocationN[LOCATION_LONGITUDE].value);
+    LOGF_DEBUG("Mount Controller Latitude: %lg Longitude: %lg", LocationN[LOCATION_LATITUDE].value,
+               LocationN[LOCATION_LONGITUDE].value);
 
     IDSetNumber(&LocationNP, nullptr);
     if(!setLocalSiderealTime(siteLong))
@@ -1865,7 +1879,7 @@ bool LX200StarGo::SetTrackMode(uint8_t mode)
     {
         LOGF_DEBUG("%s: Get Tracking Freq", __FUNCTION__);
         getTrackFrequency(&TrackFreqN[0].value);
-        IDSetNumber(&TrackingFreqNP, nullptr);
+        IDSetNumber(&TrackFreqNP, nullptr);
     }
     return true;
 }
@@ -2396,38 +2410,38 @@ void LX200StarGo::ISGetProperties(const char *dev)
     if (isConnected())
     {
         if (HasTrackMode() && TrackModeS != nullptr)
-            defineSwitch(&TrackModeSP);
+            defineProperty(&TrackModeSP);
         if (CanControlTrack())
-            defineSwitch(&TrackStateSP);
+            defineProperty(&TrackStateSP);
         //        if (HasTrackRate())
-        //            defineNumber(&TrackRateNP);
+        //            defineProperty(&TrackRateNP);
     }
     /*
         if (isConnected())
         {
             if (genericCapability & LX200_HAS_ALIGNMENT_TYPE)
-                defineSwitch(&AlignmentSP);
+                defineProperty(&AlignmentSP);
 
             if (genericCapability & LX200_HAS_TRACKING_FREQ)
-                defineNumber(&TrackingFreqNP);
+                defineProperty(&TrackingFreqNP);
 
             if (genericCapability & LX200_HAS_PULSE_GUIDING)
-                defineSwitch(&UsePulseCmdSP);
+                defineProperty(&UsePulseCmdSP);
 
             if (genericCapability & LX200_HAS_SITES)
             {
-                defineSwitch(&SiteSP);
-                defineText(&SiteNameTP);
+                defineProperty(&SiteSP);
+                defineProperty(&SiteNameTP);
             }
 
-            defineNumber(&GuideNSNP);
-            defineNumber(&GuideWENP);
+            defineProperty(&GuideNSNP);
+            defineProperty(&GuideWENP);
 
             if (genericCapability & LX200_HAS_FOCUS)
             {
-                defineSwitch(&FocusMotionSP);
-                defineNumber(&FocusTimerNP);
-                defineSwitch(&FocusModeSP);
+                defineProperty(&FocusMotionSP);
+                defineProperty(&FocusTimerNP);
+                defineProperty(&FocusModeSP);
             }
         }
         */

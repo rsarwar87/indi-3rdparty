@@ -556,6 +556,9 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
         case 0x06:
             strcpy(boardinfo[0], "AZEQ5");
             break;
+        case 0x0A:
+            strcpy(boardinfo[0], "Star Adventurer");
+            break;
         case 0x20:
             strcpy(boardinfo[0], "EQ8-R Pro");
             break;
@@ -676,7 +679,7 @@ bool Skywatcher::HasPPEC()
 
 bool Skywatcher::HasSnapPort1()
 {
-    return MountCode == 0x04 ||  MountCode == 0x05 ||  MountCode == 0x06 ||  MountCode == 0x23 || MountCode == 0xA5;
+    return MountCode == 0x04 ||  MountCode == 0x05 ||  MountCode == 0x06 ||  MountCode == 0x0A || MountCode == 0x23 || MountCode == 0xA5;
 }
 
 bool Skywatcher::HasSnapPort2()
@@ -1247,6 +1250,7 @@ void Skywatcher::SetRARate(double rate)
         newstatus.speedmode = HIGHSPEED;
     else
         newstatus.speedmode = LOWSPEED;
+    ReadMotorStatus(Axis1);
     if (RARunning)
     {
         if (newstatus.speedmode != RAStatus.speedmode)
@@ -1297,6 +1301,7 @@ void Skywatcher::SetDERate(double rate)
         newstatus.speedmode = HIGHSPEED;
     else
         newstatus.speedmode = LOWSPEED;
+    ReadMotorStatus(Axis2);
     if (DERunning)
     {
         if (newstatus.speedmode != DEStatus.speedmode)

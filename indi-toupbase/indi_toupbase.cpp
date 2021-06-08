@@ -19,6 +19,14 @@
 
 */
 
+#define Nncam_AwbOnce   Nncam_AwbOnePush
+#define Nncam_AbbOnce   Nncam_AbbOnePush
+
+#ifdef BUILD_MALLINCAM
+#define Toupcam_AwbOnce Toupcam_AwbOnePush
+#define Toupcam_AbbOnce Toupcam_AbbOnePush
+#endif
+
 #include "indi_toupbase.h"
 
 #include "config.h"
@@ -56,7 +64,7 @@
 #define FMT_RGB888  MAKEFOURCC('R', 'G', 'B', '8')
 
 static int iConnectedCamerasCount;
-static XP(InstV2) pCameraInfo[CP(MAX)];
+static XP(DeviceV2) pCameraInfo[CP(MAX)];
 static ToupBase *cameras[CP(MAX)];
 
 /********************************************************************************/
@@ -212,7 +220,7 @@ void ISSnoopDevice(XMLEle *root)
     }
 }
 
-ToupBase::ToupBase(const XP(InstV2) *instance) : m_Instance(instance)
+ToupBase::ToupBase(const XP(DeviceV2) *instance) : m_Instance(instance)
 {
     setVersion(TOUPBASE_VERSION_MAJOR, TOUPBASE_VERSION_MINOR);
 
@@ -352,6 +360,25 @@ bool ToupBase::initProperties()
                        IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
     ///////////////////////////////////////////////////////////////////////////////////
+    /// Low Noise Mode
+    ///////////////////////////////////////////////////////////////////////////////////
+    IUFillSwitch(&LowNoiseS[INDI_ENABLED], "INDI_ENABLED", "Enabled", ISS_OFF);
+    IUFillSwitch(&LowNoiseS[INDI_DISABLED], "INDI_DISABLED", "Disabled", ISS_ON);
+    IUFillSwitchVector(&LowNoiseSP, LowNoiseS, 2, getDeviceName(), "TC_LOW_NOISE_CONTROL", "Low Noise Mode", CONTROL_TAB,
+                       IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
+
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    /// Heat Control
+    ///////////////////////////////////////////////////////////////////////////////////
+    IUFillSwitch(&HeatUpS[TC_HEAT_OFF], "TC_HEAT_OFF", "Off", ISS_ON);
+    IUFillSwitch(&HeatUpS[TC_HEAT_ON], "TC_HEAT_ON", "On", ISS_OFF);
+    IUFillSwitch(&HeatUpS[TC_HEAT_MAX], "TC_HEAT_MAX", "Max", ISS_OFF);
+    IUFillSwitchVector(&HeatUpSP, HeatUpS, 2, getDeviceName(), "TC_HEAT_CONTROL", "Heat", CONTROL_TAB,
+                       IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
+
+
+    ///////////////////////////////////////////////////////////////////////////////////
     /// Fan Control
     ///////////////////////////////////////////////////////////////////////////////////
     IUFillSwitch(&FanControlS[TC_FAN_ON], "TC_FAN_ON", "On", ISS_ON);
@@ -417,54 +444,58 @@ bool ToupBase::updateProperties()
 
         if (HasCooler())
         {
-            defineSwitch(&CoolerSP);
+            defineProperty(&CoolerSP);
             loadConfig(true, "CCD_COOLER");
         }
         // Even if there is no cooler, we define temperature property as READ ONLY
         else if (m_Instance->model->flag & CP(FLAG_GETTEMPERATURE))
         {
             TemperatureNP.p = IP_RO;
-            defineNumber(&TemperatureNP);
+            defineProperty(&TemperatureNP);
         }
 
         if (m_Instance->model->flag & CP(FLAG_FAN))
         {
-            defineSwitch(&FanControlSP);
-            defineSwitch(&FanSpeedSP);
+            defineProperty(&FanControlSP);
+            defineProperty(&FanSpeedSP);
         }
 
         if (m_MonoCamera == false)
-            defineSwitch(&WBAutoSP);
+            defineProperty(&WBAutoSP);
 
-        defineNumber(&ControlNP);
-        defineSwitch(&AutoControlSP);
-        defineSwitch(&AutoExposureSP);
-        defineSwitch(&VideoFormatSP);
-        defineSwitch(&ResolutionSP);
-        defineNumber(&ADCNP);
+        defineProperty(&ControlNP);
+        defineProperty(&AutoControlSP);
+        defineProperty(&AutoExposureSP);
+        defineProperty(&VideoFormatSP);
+        defineProperty(&ResolutionSP);
+        defineProperty(&ADCNP);
+        if (m_HasLowNoise)
+            defineProperty(&LowNoiseSP);
+        if (m_HasHeatUp)
+            defineProperty(&HeatUpSP);
 
         if (m_Instance->model->flag & (CP(FLAG_CG) | CP(FLAG_CGHDR)))
         {
             m_hasDualGain = true;
-            defineNumber(&GainConversionNP);
-            defineSwitch(&GainConversionSP);
+            defineProperty(&GainConversionNP);
+            defineProperty(&GainConversionSP);
         }
 
         // Levels
-        defineNumber(&LevelRangeNP);
-        defineNumber(&BlackBalanceNP);
-        defineNumber(&OffsetNP);
+        defineProperty(&LevelRangeNP);
+        defineProperty(&BlackBalanceNP);
+        defineProperty(&OffsetNP);
 
         // Balance
         if (m_MonoCamera == false)
         {
-            defineNumber(&WBTempTintNP);
-            defineNumber(&WBRGBNP);
+            defineProperty(&WBTempTintNP);
+            defineProperty(&WBRGBNP);
         }
 
         // Firmware
-        defineText(&FirmwareTP);
-        defineText(&SDKVersionTP);
+        defineProperty(&FirmwareTP);
+        defineProperty(&SDKVersionTP);
     }
     else
     {
@@ -488,6 +519,10 @@ bool ToupBase::updateProperties()
         deleteProperty(VideoFormatSP.name);
         deleteProperty(ResolutionSP.name);
         deleteProperty(ADCNP.name);
+        if (m_HasLowNoise)
+            deleteProperty(LowNoiseSP.name);
+        if (m_HasHeatUp)
+            deleteProperty(HeatUpSP.name);
 
         if (m_Instance->model->flag & (CP(FLAG_CG) | CP(FLAG_CGHDR)))
         {
@@ -854,6 +889,20 @@ void ToupBase::setupParams()
     GainConversionN[TC_HCG_THRESHOLD].max = m_MaxGainNative;
     GainConversionN[TC_HCG_THRESHOLD].step = (m_MaxGainNative - nMin) / 20.0;
 
+#if defined(BUILD_TOUPCAM) || defined(BUILD_ALTAIRCAM) || defined(BUILD_STARSHOOTG)
+    // Low Noise
+    if (m_Instance->model->flag & CP(FLAG_LOW_NOISE))
+    {
+        m_HasLowNoise = true;
+    }
+
+    // Heat Up
+    if (m_Instance->model->flag & CP(FLAG_HEAT))
+    {
+        m_HasHeatUp = true;
+    }
+#endif
+
     // Contrast
     FP(get_Contrast(m_CameraHandle, &nVal));
     LOGF_DEBUG("Contrast Control: %d", nVal);
@@ -961,7 +1010,7 @@ void ToupBase::setupParams()
     // Allocate memory
     allocateFrameBuffer();
 
-    SetTimer(POLLMS);
+    SetTimer(getCurrentPollingPeriod());
 
     //Start pull callback
     rc = FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
@@ -1334,6 +1383,73 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
             return true;
         }
 
+#if defined(BUILD_TOUPCAM) || defined(BUILD_ALTAIRCAM) || defined(BUILD_STARSHOOTG)
+        //////////////////////////////////////////////////////////////////////
+        /// Low Noise
+        //////////////////////////////////////////////////////////////////////
+        if (!strcmp(name, LowNoiseSP.name))
+        {
+            int prevIndex = IUFindOnSwitchIndex(&LowNoiseSP);
+            IUUpdateSwitch(&LowNoiseSP, states, names, n);
+            HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_LOW_NOISE), LowNoiseS[INDI_ENABLED].s));
+            if (FAILED(rc))
+            {
+                LOGF_ERROR("Failed to set low noise mode %s. Error (%s)", LowNoiseS[INDI_ENABLED].s == ISS_ON ? "on" : "off",
+                           errorCodes[rc].c_str());
+                LowNoiseSP.s = IPS_ALERT;
+                IUResetSwitch(&LowNoiseSP);
+                LowNoiseS[prevIndex].s = ISS_ON;
+            }
+            else
+            {
+                LowNoiseSP.s = IPS_OK;
+            }
+
+            IDSetSwitch(&LowNoiseSP, nullptr);
+            return true;
+        }
+
+        //////////////////////////////////////////////////////////////////////
+        /// Heat Control
+        //////////////////////////////////////////////////////////////////////
+        if (!strcmp(name, HeatUpSP.name))
+        {
+            int prevIndex = IUFindOnSwitchIndex(&HeatUpSP);
+            IUUpdateSwitch(&HeatUpSP, states, names, n);
+            HRESULT rc = 0;
+            if (HeatUpS[TC_HEAT_OFF].s == ISS_ON)
+                rc = FP(put_Option(m_CameraHandle, CP(OPTION_HEAT), 0));
+            else if (HeatUpS[TC_HEAT_ON].s == ISS_ON)
+            {
+                // Max heat off
+                FP(put_Option(m_CameraHandle, CP(OPTION_HEAT_MAX), 0));
+                // Regular heater on
+                rc = FP(put_Option(m_CameraHandle, CP(OPTION_HEAT), 1));
+            }
+            else
+            {
+                // Regular heater on
+                FP(put_Option(m_CameraHandle, CP(OPTION_HEAT), 1));
+                // Max heat on
+                rc = FP(put_Option(m_CameraHandle, CP(OPTION_HEAT_MAX), 1));
+            }
+            if (FAILED(rc))
+            {
+                LOGF_ERROR("Failed to set heat mode. Error (%s)", errorCodes[rc].c_str());
+                HeatUpSP.s = IPS_ALERT;
+                IUResetSwitch(&HeatUpSP);
+                HeatUpS[prevIndex].s = ISS_ON;
+            }
+            else
+            {
+                HeatUpSP.s = IPS_OK;
+            }
+
+            IDSetSwitch(&HeatUpSP, nullptr);
+            return true;
+        }
+#endif
+
         //////////////////////////////////////////////////////////////////////
         /// Fan Control
         //////////////////////////////////////////////////////////////////////
@@ -1575,7 +1691,7 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
             switch (IUFindOnSwitchIndex(&AutoControlSP))
             {
                 case TC_AUTO_TINT:
-                    rc = FP(AwbOnePush(m_CameraHandle, &ToupBase::TempTintCB, this));
+                    rc = FP(AwbOnce(m_CameraHandle, &ToupBase::TempTintCB, this));
                     autoOperation = "Auto White Balance Tint/Temp";
                     break;
                 case TC_AUTO_WB:
@@ -1583,7 +1699,7 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
                     autoOperation = "Auto White Balance RGB";
                     break;
                 case TC_AUTO_BB:
-                    rc = FP(AbbOnePush(m_CameraHandle, &ToupBase::BlackBalanceCB, this));
+                    rc = FP(AbbOnce(m_CameraHandle, &ToupBase::BlackBalanceCB, this));
                     autoOperation = "Auto Black Balance";
                     break;
                 default:
@@ -1663,7 +1779,7 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
             IUUpdateSwitch(&WBAutoSP, states, names, n);
             HRESULT rc = 0;
             if (IUFindOnSwitchIndex(&WBAutoSP) == TC_AUTO_WB_TT)
-                rc = FP(AwbOnePush(m_CameraHandle, &ToupBase::TempTintCB, this));
+                rc = FP(AwbOnce(m_CameraHandle, &ToupBase::TempTintCB, this));
             else
                 rc = FP(AwbInit(m_CameraHandle, &ToupBase::WhiteBalanceCB, this));
 
@@ -1920,7 +2036,7 @@ bool ToupBase::StartExposure(float duration)
     //    int timeMS = uSecs / 1000 - 50;
     //    if (timeMS <= 0)
     //        sendImageCallBack();
-    //    else if (static_cast<uint32_t>(timeMS) < POLLMS)
+    //    else if (static_cast<uint32_t>(timeMS) < getCurrentPollingPeriod())
     //        IEAddTimer(timeMS, &TOUPCAM::sendImageCB, this);
 
     // Trigger an exposure
@@ -2059,7 +2175,7 @@ void ToupBase::TimerHit()
         }
     }
 
-    SetTimer(POLLMS);
+    SetTimer(getCurrentPollingPeriod());
 
 }
 
@@ -2263,7 +2379,8 @@ bool ToupBase::saveConfigItems(FILE * fp)
         IUSaveConfigSwitch(fp, &WBAutoSP);
 
     IUSaveConfigSwitch(fp, &VideoFormatSP);
-
+    if (m_HasLowNoise)
+        IUSaveConfigSwitch(fp, &LowNoiseSP);
     return true;
 }
 
@@ -2482,7 +2599,12 @@ void ToupBase::eventPullCallBack(unsigned event)
                 {
                     // Fix proposed by Seven Watt
                     // Check https://github.com/indilib/indi-3rdparty/issues/112
+                    //
+                    // Starshootg_Flush is deprecated but there are no alternativess
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
                     HRESULT rc = FP(Flush(m_CameraHandle));
+#pragma GCC diagnostic pop
                     LOG_DEBUG("Image event received after CCD is stopped. Image flushed");
                     if (FAILED(rc))
                     {

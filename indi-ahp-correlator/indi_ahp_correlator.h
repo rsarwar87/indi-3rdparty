@@ -61,32 +61,17 @@ public:
         free(linePowerS);
         free(linePowerSP);
 
+        free(lineActiveEdgeS);
+        free(lineActiveEdgeSP);
+
+        free(lineEdgeTriggerS);
+        free(lineEdgeTriggerSP);
+
+        free(lineLocationN);
+        free(lineLocationNP);
+
         free(lineDelayN);
         free(lineDelayNP);
-
-        free(lineGPSN);
-        free(lineGPSNP);
-
-        free(lineTelescopeN);
-        free(lineTelescopeNP);
-
-        free(lineDomeN);
-        free(lineDomeNP);
-
-        free(snoopGPSN);
-        free(snoopGPSNP);
-
-        free(snoopTelescopeN);
-        free(snoopTelescopeNP);
-
-        free(snoopTelescopeInfoN);
-        free(snoopTelescopeInfoNP);
-
-        free(snoopDomeN);
-        free(snoopDomeNP);
-
-        free(lineDevicesT);
-        free(lineDevicesTP);
 
         free(autocorrelationsB);
         free(crosscorrelationsB);
@@ -98,8 +83,6 @@ public:
 
         free(totalcounts);
         free(totalcorrelations);
-        free(alt);
-        free(az);
         free(delay);
         free(baselines);
     }
@@ -157,40 +140,29 @@ private:
     ISwitch *linePowerS;
     ISwitchVectorProperty *linePowerSP;
 
+    ISwitch *lineActiveEdgeS;
+    ISwitchVectorProperty *lineActiveEdgeSP;
+
+    ISwitch *lineEdgeTriggerS;
+    ISwitchVectorProperty *lineEdgeTriggerSP;
+
+    INumber *lineLocationN;
+    INumberVectorProperty *lineLocationNP;
+
     INumber *lineDelayN;
     INumberVectorProperty *lineDelayNP;
 
-    INumber *lineGPSN;
-    INumberVectorProperty *lineGPSNP;
-
-    INumber *lineTelescopeN;
-    INumberVectorProperty *lineTelescopeNP;
-
-    INumber *lineDomeN;
-    INumberVectorProperty *lineDomeNP;
-
-    INumber *snoopGPSN;
-    INumberVectorProperty *snoopGPSNP;
-
-    INumber *snoopTelescopeN;
-    INumberVectorProperty *snoopTelescopeNP;
-
-    INumber *snoopTelescopeInfoN;
-    INumberVectorProperty *snoopTelescopeInfoNP;
-
-    INumber *snoopDomeN;
-    INumberVectorProperty *snoopDomeNP;
-
-    IText *lineDevicesT;
-    ITextVectorProperty *lineDevicesTP;
-
     double *totalcounts;
     ahp_xc_correlation *totalcorrelations;
-    double  *alt;
-    double *az;
+    double Altitude;
+    double Azimuth;
     double *delay;
     double *framebuffer;
     baseline** baselines;
+    INDI::Correlator::Baseline *center;
+
+    IBLOB *plotB;
+    IBLOBVectorProperty plotBP;
 
     IBLOB *autocorrelationsB;
     IBLOBVectorProperty autocorrelationsBP;
@@ -198,38 +170,34 @@ private:
     IBLOB *crosscorrelationsB;
     IBLOBVectorProperty crosscorrelationsBP;
 
-    IBLOB *plotB;
-    IBLOBVectorProperty plotBP;
-
     dsp_stream_p *autocorrelations_str;
     dsp_stream_p *crosscorrelations_str;
     dsp_stream_p *plot_str;
 
-    INumber settingsN[2];
+    INumber settingsN[3];
     INumberVectorProperty settingsNP;
 
     unsigned int clock_frequency;
     unsigned int clock_divider;
 
-    float timeleft;
+    double timeleft;
     double wavelength;
     void Callback();
     bool callHandshake();
     // Utility functions
-    float CalcTimeLeft();
+    double CalcTimeLeft();
     void  setupParams();
     bool SendChar(char);
     bool SendCommand(it_cmd cmd, unsigned char value = 0);
-    void ActiveLine(int, bool, bool);
+    void ActiveLine(int, bool, bool, bool, bool);
     void SetFrequencyDivider(unsigned char divider);
     void EnableCapture(bool start);
     void sendFile(IBLOB* Blobs, IBLOBVectorProperty BlobP, int len);
     int getFileIndex(const char * dir, const char * prefix, const char * ext);
-    float CalcTimeLeft(timeval start, float req);
     // Struct to keep timing
     struct timeval ExpStart;
-    float ExposureRequest;
-    float ExposureStart;
+    double ExposureRequest;
+    double ExposureStart;
     bool threadsRunning;
 
     inline double getCurrentTime()
