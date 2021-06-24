@@ -29,8 +29,13 @@
 #include <config.h>
 #include <indilogger.h>
 #include <gphoto2/gphoto2-version.h>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+// the older libraw uses auto_ptr
 #include <libraw/libraw.h>
 #include <cpr/cpr.h>
+#pragma GCC diagnostic pop
+
 
 #include "gphoto_driver.h"
 #include "dsusbdriver.h"

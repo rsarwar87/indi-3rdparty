@@ -1250,6 +1250,7 @@ void Skywatcher::SetRARate(double rate)
         newstatus.speedmode = HIGHSPEED;
     else
         newstatus.speedmode = LOWSPEED;
+    ReadMotorStatus(Axis1);
     if (RARunning)
     {
         if (newstatus.speedmode != RAStatus.speedmode)
@@ -1300,6 +1301,7 @@ void Skywatcher::SetDERate(double rate)
         newstatus.speedmode = HIGHSPEED;
     else
         newstatus.speedmode = LOWSPEED;
+    ReadMotorStatus(Axis2);
     if (DERunning)
     {
         if (newstatus.speedmode != DEStatus.speedmode)
