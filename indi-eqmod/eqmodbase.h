@@ -132,14 +132,16 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
 	      ISwitch ResetAbsPosS[1];
 	      ISwitchVectorProperty ResetAbsPosSP;
 
-	      INumber MinimumPeriodN[1];
+	      INumber MinimumPeriodN[2];
 	      INumberVectorProperty MinimumPeriodNP;
-	      INumber MaximumPeriodN[1];
+	      INumber MaximumPeriodN[2];
 	      INumberVectorProperty MaximumPeriodNP;
 	      INumber ModeN[1];
 	      INumberVectorProperty ModeNP;
-	      INumber StepsPerRotationN[6];
-	      INumberVectorProperty StepsPerRotationNP;
+	      INumber StepsPerRotation0N[6];
+	      INumberVectorProperty StepsPerRotation0NP;
+	      INumber StepsPerRotation1N[6];
+	      INumberVectorProperty StepsPerRotation1NP;
 
 	      INumberVectorProperty DeviceValNP;
 	      INumber DeviceValN[10];

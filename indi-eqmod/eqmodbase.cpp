@@ -471,8 +471,8 @@ bool EQMod::loadProperties()
 	IUFillSwitch(&ServerDebugrS[1], "Disable", "", ISS_ON);
 	IUFillSwitchVector(&ServerDebugSP, ServerDebugrS, 2, getDeviceName(), "Enable SysLog Debugger in koheron server", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 	// Compensate for temperature
-	IUFillSwitch(&MotorTypeS[0], "DRV8825", "", ISS_ON);
-	IUFillSwitch(&MotorTypeS[1], "TMC2226", "", ISS_OFF);
+	IUFillSwitch(&MotorTypeS[0], "DRV8825", "", ISS_OFF);
+	IUFillSwitch(&MotorTypeS[1], "TMC2226", "", ISS_ON);
 	IUFillSwitchVector(&MotorTypeSP, MotorTypeS, 2, getDeviceName(), "Switch between DRV8825 and TMC2226", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Reset absolute possition
@@ -488,19 +488,28 @@ bool EQMod::loadProperties()
 	IUFillSwitchVector(&SaveDeviceeValSP,SaveDeviceS,3,getDeviceName(),"SAVE_DEV_VAL","Load Device Settings at Startup (only works if not initialized already)",KOHERON_TAB,IP_RW,ISR_1OFMANY,0,IPS_IDLE);
   
 	// Minimum/Maximum Period
-	IUFillNumber(&MinimumPeriodN[0], "MIN_PERIOD_VALUE", "usec", "%.2f", 5, 0xFFFFFFF, 1, 15);
-	IUFillNumberVector(&MinimumPeriodNP, MinimumPeriodN, 1, getDeviceName(), "MIN_PERIOD_VALUE", "Min Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
-	IUFillNumber(&MaximumPeriodN[0], "MAX_PERIOD_VALUE", "usec", "%.2f", 5, 0xFFFFFFF, 1, 268435);
-	IUFillNumberVector(&MaximumPeriodNP, MaximumPeriodN, 1, getDeviceName(), "MAX_PERIOD_VALUE", "Max Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumber(&MinimumPeriodN[0], "RA_MIN_PERIOD_VALUE", "RA usec", "%.2f", 5, 0xFFFFFFF, 1, 15);
+	IUFillNumber(&MinimumPeriodN[1], "DEC_MIN_PERIOD_VALUE", "DEC usec", "%.2f", 5, 0xFFFFFFF, 1, 15);
+	IUFillNumberVector(&MinimumPeriodNP, MinimumPeriodN, 2, getDeviceName(), "MIN_PERIOD_VALUE", "Min Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumber(&MaximumPeriodN[0], "RA_MAX_PERIOD_VALUE", "RA usec", "%.2f", 5, 0xFFFFFFF, 1, 268435);
+	IUFillNumber(&MaximumPeriodN[1], "DEC_MAX_PERIOD_VALUE", "DEC usec", "%.2f", 5, 0xFFFFFFF, 1, 268435);
+	IUFillNumberVector(&MaximumPeriodNP, MaximumPeriodN, 2, getDeviceName(), "MAX_PERIOD_VALUE", "Max Period", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
 	IUFillNumber(&ModeN[0], "MODE_VALUE", "ticks", "%.0f", 0, 7, 1, 7);
 	IUFillNumberVector(&ModeNP, ModeN, 1, getDeviceName(), "MODE_VALUE", "Stepper Mode", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
 
-	IUFillNumber(&StepsPerRotationN[1], "STEPPERUSTEP_VALUE", "MicroSteps", "%.0f", 1, 255, 1, 32);
-	IUFillNumber(&StepsPerRotationN[2], "HIGHGEAR_VALUE", "High gear teeths", "%.0f", 1, 255, 1, 60);
-	IUFillNumber(&StepsPerRotationN[3], "LOWGEAR_VALUE", "Low gear teeths", "%.0f", 1, 255, 1, 12);
-	IUFillNumber(&StepsPerRotationN[4], "MOUNTGEAR_VALUE", "Mount gear rotation", "%.0f", 1, 255, 1, 144);
-	IUFillNumber(&StepsPerRotationN[0], "STEPPERTICKS_VALUE", "Ticks/stepper rotation", "%.0f", 1, 255, 1, 200);
-	IUFillNumberVector(&StepsPerRotationNP, StepsPerRotationN, 5, getDeviceName(), "STEPSPERROTATION_VALUE", "Steps per Rotation", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+	IUFillNumber(&StepsPerRotation0N[1], "RA_STEPPERUSTEP_VALUE", "MicroSteps", "%.0f", 1, 255, 1, 32);
+	IUFillNumber(&StepsPerRotation0N[2], "RA_HIGHGEAR_VALUE", "High gear teeths", "%.0f", 1, 255, 1, 60);
+	IUFillNumber(&StepsPerRotation0N[3], "RA_LOWGEAR_VALUE", "Low gear teeths", "%.0f", 1, 255, 1, 12);
+	IUFillNumber(&StepsPerRotation0N[4], "RA_MOUNTGEAR_VALUE", "Mount gear rotation", "%.0f", 1, 255, 1, 144);
+	IUFillNumber(&StepsPerRotation0N[0], "RA_STEPPERTICKS_VALUE", "Ticks/stepper rotation", "%.0f", 1, 255, 1, 200);
+	IUFillNumberVector(&StepsPerRotation0NP, StepsPerRotation0N, 5, getDeviceName(), "STEPSPERROTATION_VALUE_RA", "RA Steps per Rotation", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
+
+	IUFillNumber(&StepsPerRotation1N[1], "DEC_STEPPERUSTEP_VALUE", "MicroSteps", "%.0f", 1, 255, 1, 32);
+	IUFillNumber(&StepsPerRotation1N[2], "DRA_HIGHGEAR_VALUE", "High gear teeths", "%.0f", 1, 255, 1, 60);
+	IUFillNumber(&StepsPerRotation1N[3], "DRA_LOWGEAR_VALUE", "Low gear teeths", "%.0f", 1, 255, 1, 12);
+	IUFillNumber(&StepsPerRotation1N[4], "DRA_MOUNTGEAR_VALUE", "Mount gear rotation", "%.0f", 1, 255, 1, 144);
+	IUFillNumber(&StepsPerRotation1N[0], "DRA_STEPPERTICKS_VALUE", "Ticks/stepper rotation", "%.0f", 1, 255, 1, 200);
+	IUFillNumberVector(&StepsPerRotation1NP, StepsPerRotation1N, 5, getDeviceName(), "STEPSPERROTATION_VALUE_DEC", "DEC Steps per Rotation", KOHERON_TAB, IP_RW, 0, IPS_IDLE);
 
 	IUFillNumber(&DeviceValN[0], "MIN_PERIOD", "Min period usec", "%.2f", 5, 0xFFFFFFF, 1, 15);
 	IUFillNumber(&DeviceValN[1], "MAX_PERIOD", "Max period usec", "%.2f", 5, 0xFFFFFFF, 1, 268435);
@@ -543,13 +552,21 @@ void EQMod::KoheronReadSettings(bool over)
     DeviceValN[9].value = mount->koheron_interface->SwpGetMotorType(0) ? 1 : 0;
 
     MinimumPeriodN[0].value = DeviceValN[0].value;
-    MaximumPeriodN[1].value = DeviceValN[1].value;
+    MaximumPeriodN[0].value = DeviceValN[1].value;
+    MinimumPeriodN[1].value = mount->koheron_interface->get_minimum_period_usec(1);
+    MaximumPeriodN[1].value = mount->koheron_interface->get_maximum_period_usec(1);
     ModeN[0].value = DeviceValN[2].value;
-    StepsPerRotationN[0].value = ret_p[1];
-    StepsPerRotationN[1].value = ret_p[0];
-    StepsPerRotationN[2].value = ret_p[3];
-    StepsPerRotationN[3].value = ret_p[4];
-    StepsPerRotationN[4].value = ret_p[2];
+    StepsPerRotation0N[0].value = ret_p[1];
+    StepsPerRotation0N[1].value = ret_p[0];
+    StepsPerRotation0N[2].value = ret_p[3];
+    StepsPerRotation0N[3].value = ret_p[4];
+    StepsPerRotation0N[4].value = ret_p[2];
+    ret_p = mount->koheron_interface->get_steps_per_rotation_params(1);
+    StepsPerRotation1N[0].value = ret_p[1];
+    StepsPerRotation1N[1].value = ret_p[0];
+    StepsPerRotation1N[2].value = ret_p[3];
+    StepsPerRotation1N[3].value = ret_p[4];
+    StepsPerRotation1N[4].value = ret_p[2];
 	  DeviceValNP.s=IPS_OK;
     IDSetNumber(&DeviceValNP, nullptr);
     return;
@@ -597,7 +614,8 @@ bool EQMod::updateProperties()
 		    defineProperty(&MinimumPeriodNP);
 		    defineProperty(&MaximumPeriodNP);
 		    defineProperty(&ModeNP);
-		    defineProperty(&StepsPerRotationNP);
+		    defineProperty(&StepsPerRotation0NP);
+		    defineProperty(&StepsPerRotation1NP);
 		    defineProperty(&DeviceValNP);
 
 #endif
@@ -799,7 +817,8 @@ bool EQMod::updateProperties()
 		deleteProperty(MinimumPeriodNP.name);
 		deleteProperty(MaximumPeriodNP.name);
 		deleteProperty(ModeNP.name);
-		deleteProperty(StepsPerRotationNP.name);
+		deleteProperty(StepsPerRotation0NP.name);
+		deleteProperty(StepsPerRotation1NP.name);
 		deleteProperty(DeviceValNP.name);
 		deleteProperty(RetrieveValSP.name);
 		deleteProperty(SaveDeviceeValSP.name);
@@ -2689,7 +2708,7 @@ bool EQMod::ISNewNumber(const char *dev, const char *name, double values[], char
         {
             IUUpdateNumber(&MaximumPeriodNP, values, names, n);
             mount->koheron_interface->set_maximum_period_usec(0, MaximumPeriodN[0].value);
-            mount->koheron_interface->set_maximum_period_usec(1, MaximumPeriodN[0].value);
+            mount->koheron_interface->set_maximum_period_usec(1, MaximumPeriodN[1].value);
             mount->koheron_interface->set_maximum_period_usec(2, MaximumPeriodN[0].value);
             LOGF_INFO("%s Setting max period to %u.", __func__, MaximumPeriodN[0].value);
             KoheronReadSettings();
@@ -2701,7 +2720,7 @@ bool EQMod::ISNewNumber(const char *dev, const char *name, double values[], char
         {
             IUUpdateNumber(&MinimumPeriodNP, values, names, n);
             mount->koheron_interface->set_minimum_period_usec(0, MinimumPeriodN[0].value);
-            mount->koheron_interface->set_minimum_period_usec(1, MinimumPeriodN[0].value);
+            mount->koheron_interface->set_minimum_period_usec(1, MinimumPeriodN[1].value);
             mount->koheron_interface->set_minimum_period_usec(2, MinimumPeriodN[0].value);
             LOGF_INFO("%s Setting min period to %u.", __func__, MinimumPeriodN[0].value);
             mount->UpdateMinPeriod();
@@ -2725,18 +2744,26 @@ bool EQMod::ISNewNumber(const char *dev, const char *name, double values[], char
             IDSetNumber(&ModeNP, nullptr);
             return true;
         }
-        if (!strcmp(name, StepsPerRotationNP.name))
+        if (!strcmp(name, StepsPerRotation1NP.name))
         {
-            IUUpdateNumber(&StepsPerRotationNP, values, names, n);
-                mount->koheron_interface->set_steps_per_rotation_params(1, StepsPerRotationN[0].value
-                    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
-                    , StepsPerRotationN[2].value);
-                mount->koheron_interface->set_steps_per_rotation_params(0, StepsPerRotationN[0].value
-                    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
-                    , StepsPerRotationN[2].value);
+            IUUpdateNumber(&StepsPerRotation1NP, values, names, n);
+                mount->koheron_interface->set_steps_per_rotation_params(1, StepsPerRotation1N[0].value
+                    , StepsPerRotation1N[1].value, StepsPerRotation1N[4].value, StepsPerRotation1N[2].value
+                    , StepsPerRotation1N[3].value);
             KoheronReadSettings();
-            StepsPerRotationNP.s = IPS_OK;
-            IDSetNumber(&StepsPerRotationNP, nullptr);
+            StepsPerRotation1NP.s = IPS_OK;
+            IDSetNumber(&StepsPerRotation1NP, nullptr);
+            return true;
+        }
+        if (!strcmp(name, StepsPerRotation0NP.name))
+        {
+            IUUpdateNumber(&StepsPerRotation0NP, values, names, n);
+                mount->koheron_interface->set_steps_per_rotation_params(0, StepsPerRotation0N[0].value
+                    , StepsPerRotation0N[1].value, StepsPerRotation0N[4].value, StepsPerRotation0N[2].value
+                    , StepsPerRotation0N[3].value);
+            KoheronReadSettings();
+            StepsPerRotation0NP.s = IPS_OK;
+            IDSetNumber(&StepsPerRotation0NP, nullptr);
             return true;
         }
 #endif
