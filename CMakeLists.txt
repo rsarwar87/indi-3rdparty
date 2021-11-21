@@ -39,8 +39,7 @@ IF (UNIX OR APPLE)
             STRING(FIND ${SOURCE_FILE} libfli DIR3_FOUND)
             STRING(FIND ${SOURCE_FILE} libqhy DIR4_FOUND)
             STRING(FIND ${SOURCE_FILE} libqsi DIR5_FOUND)
-            STRING(FIND ${SOURCE_FILE} libsbig DIR6_FOUND)
-            STRING(FIND ${SOURCE_FILE} fxload DIR7_FOUND)
+            STRING(FIND ${SOURCE_FILE} libsbig DIR6_FOUND)            
             STRING(FIND ${SOURCE_FILE} libinovasdk DIR8_FOUND)
             STRING(FIND ${SOURCE_FILE} libsv305 DIR9_FOUND)
             STRING(FIND ${SOURCE_FILE} libahp-xc DIR10_FOUND)
@@ -66,6 +65,7 @@ option(BUILD_LIBS "Build 3rd Party Libraries, not 3rd Party Drivers" Off)
 # Define standard set of drivers to build (default linux target)
 option(WITH_EQMOD "Install EQMod Driver" On)
 option(WITH_STARBOOK "Install Starbook Driver" On)
+option(WITH_STARBOOK_TEN "Install Starbook Ten Driver" On)
 option(WITH_CAUX "Install Celestron AUX Driver" On)
 option(WITH_SX "Install StarLight Xpress Driver" On)
 option(WITH_MAXDOME "Install MaxDomeII Driver" On)
@@ -90,12 +90,10 @@ option(WITH_ASICAM "Install ZWO Optics ASI Driver" On)
 option(WITH_MGEN "Install MGen Autoguider" On)
 option(WITH_ASTROMECHFOC "Install Astromechanics Focuser" On)
 option(WITH_LIMESDR "Install LIME-SDR Receiver" On)
-option(WITH_RTLSDR "Install RTL-SDR Receiver" On)
 option(WITH_RADIOSIM "Install RadioSim Receiver" On)
 option(WITH_GPSNMEA "Install GPS NMEA Driver" On)
 option(WITH_RTKLIB "Install RTKLIB Driver" On)
 option(WITH_ARMADILLO "Install Armadillo & Platypus Driver" On)
-option(WITH_FXLOAD "Install FX3 compatible fxload tool" Off)
 option(WITH_NIGHTSCAPE "Install Nightscape 8300 Driver" On)
 option(WITH_ATIK "Install Atik Driver" On)
 option(WITH_TOUPBASE "Install Toupbase Driver" On)
@@ -107,8 +105,11 @@ option(WITH_SKYWALKER "Install AOK SkyWalker Mount Driver" On)
 option(WITH_TALON6 "Install Talon6 Mount Driver" On)
 option(WITH_PENTAX "Install Pentax Driver" On)
 option(WITH_ASTROLINK4 "Install AstroLink4 Driver" On)
-option(WITH_AHP_CORRELATOR "Install AHP XC Correlators Driver" On)
+option(WITH_AHP_XC "Install AHP XC Correlators Driver" On)
+option(WITH_ORION_SSG3 "Install Orion StarShoot G3 Driver" On)
 option(WITH_SV305 "Install SVBONY SV305 Camera Driver" On)
+option(WITH_BRESSEREXOS2 "Install Bresser Exos 2 GoTo Mount Driver" On)
+option(WITH_PLAYERONE "Install Player One Astronomy's Camera Driver" On)
 
 # FFMPEG required for INDI Webcam driver
 find_package(FFmpeg)
@@ -135,12 +136,11 @@ ENDIF(MMAL_FOUND)
 # Add/remove cases for OSX
 IF (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(WITH_INOVAPLX Off)
-    set(WITH_GIGE Off)
-    set(WITH_FXLOAD Off)
+    set(WITH_GIGE Off)    
     set(WITH_PENTAX Off)
     set(WITH_GPSD Off)
     set(WITH_SV305 Off)
-    set(WITH_AHP_CORRELATOR Off)
+    set(WITH_AHP_XC Off)
 ENDIF ()
 # Disable apogee, qhy and mi with gcc 4.8 and earlier versions
 IF (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.9)
@@ -212,9 +212,9 @@ add_subdirectory(libpktriggercord)
 endif (WITH_PENTAX)
 
 # libahp-xc
-if (WITH_AHP_CORRELATOR)
+if (WITH_AHP_XC)
 add_subdirectory(libahp-xc)
-endif(WITH_AHP_CORRELATOR)
+endif(WITH_AHP_XC)
 
 #toupbase dependencies
 if (WITH_TOUPBASE)
@@ -229,6 +229,11 @@ endif (WITH_TOUPBASE)
 if (WITH_SV305)
 add_subdirectory(libsv305)
 endif (WITH_SV305)
+
+#libplayerone
+if (WITH_PLAYERONE)
+add_subdirectory(libplayerone)
+endif(WITH_PLAYERONE)
 
 # This is the main 3rd Party build.  It runs if the Build Libs option is not selected.
 ELSE(BUILD_LIBS)
@@ -252,6 +257,11 @@ endif(WITH_SKYWALKER)
 if (WITH_STARBOOK)
 add_subdirectory(indi-starbook)
 endif(WITH_STARBOOK)
+
+## Starbook Ten
+if (WITH_STARBOOK_TEN)
+add_subdirectory(indi-starbook-ten)
+endif(WITH_STARBOOK_TEN)
 
 ## Stalight Xpress
 if (WITH_SX)
@@ -285,7 +295,6 @@ endif(WITH_SHELYAK)
 
 ## Cloud Watcher
 if (WITH_CLOUDWATCHER)
-add_subdirectory(indi-aagcloudwatcher)
 add_subdirectory(indi-aagcloudwatcher-ng)
 endif (WITH_CLOUDWATCHER)
 
@@ -489,16 +498,6 @@ if (WITH_ASTROMECHFOC)
 add_subdirectory(indi-astromechfoc)
 endif(WITH_ASTROMECHFOC)
 
-## RTL-SDR
-if (WITH_RTLSDR)
-find_package(RTLSDR)
-if (RTLSDR_FOUND)
-add_subdirectory(indi-rtlsdr)
-else (RTLSDR_FOUND)
-SET(LIBRARIES_FOUND FALSE)
-endif (RTLSDR_FOUND)
-endif (WITH_RTLSDR)
-
 ## LIME-SDR
 if (WITH_LIMESDR)
 find_package(LIMESUITE)
@@ -512,10 +511,6 @@ endif (WITH_LIMESDR)
 if (WITH_ARMADILLO)
 add_subdirectory(indi-armadillo-platypus)
 endif(WITH_ARMADILLO)
-
-if (WITH_FXLOAD)
-add_subdirectory(fxload)
-endif()
 
 if (WITH_WEBCAM)
 add_subdirectory(indi-webcam)
@@ -549,14 +544,14 @@ endif (PENTAX_FOUND)
 endif(WITH_PENTAX)
 
 # AHP
-if (WITH_AHP_CORRELATOR)
+if (WITH_AHP_XC)
 find_package(AHPXC)
 if(AHPXC_FOUND)
-add_subdirectory(indi-ahp-correlator)
+add_subdirectory(indi-ahp-xc)
 else(AHPXC_FOUND)
 add_subdirectory(libahp-xc)
 endif(AHPXC_FOUND)
-endif(WITH_AHP_CORRELATOR)
+endif(WITH_AHP_XC)
 
 # sv305
 if (WITH_SV305)
@@ -573,6 +568,27 @@ endif(WITH_SV305)
 if (WITH_RPICAM)
 add_subdirectory(indi-rpicam)
 endif(WITH_RPICAM)
+
+# Bresser Exos 2 GoTo
+if (WITH_BRESSEREXOS2)
+add_subdirectory(indi-bresserexos2)
+endif(WITH_BRESSEREXOS2)
+
+# Orion SSG3
+if (WITH_ORION_SSG3)
+add_subdirectory(indi-orion-ssg3)
+endif(WITH_ORION_SSG3)
+
+# PLAYERONE
+if (WITH_PLAYERONE)
+find_package(PLAYERONE)
+if (PLAYERONE_FOUND)
+add_subdirectory(indi-playerone)
+else (PLAYERONE_FOUND)
+add_subdirectory(libplayerone)
+SET(LIBRARIES_FOUND FALSE)
+endif(PLAYERONE_FOUND)
+endif(WITH_PLAYERONE)
 
 # Check if libraries are found. If not, we must build them, install them, THEN run CMake again to build and instal the drivers. If all the libraraies are installed, then we build and install the drivers only now.
 if (LIBRARIES_FOUND)
@@ -639,10 +655,6 @@ if (WITH_LIMESDR AND NOT LIMESDR_FOUND)
 message(STATUS "liblimesuite was not found. Please install liblimesuite first before running cmake again to install indi-limesdr.")
 endif (WITH_LIMESDR AND NOT LIMESDR_FOUND)
 
-if (WITH_RTLSDR AND NOT RTLSDR)
-message(STATUS "librtlsdr was not found. Please install librtlsdr first before running cmake again to install indi-rtlsdr.")
-endif (WITH_RTLSDR AND NOT RTLSDR)
-
 if (WITH_PENTAX AND NOT PENTAX_FOUND)
 message(STATUS "libpktriggercord and/or libricohcamerasdk were not found and will now be built. Please install these libraries first before running cmake again to install indi-pentax.")
 endif (WITH_PENTAX AND NOT PENTAX_FOUND)
@@ -650,6 +662,10 @@ endif (WITH_PENTAX AND NOT PENTAX_FOUND)
 if (WITH_SV305 AND NOT SV305_FOUND)
 message(STATUS "libsv305 was not found and will now be built. Please install this libsv305 first before running cmake again to install indi-sv305.")
 endif (WITH_SV305 AND NOT SV305_FOUND)
+
+if (WITH_PLAYERONE AND NOT PLAYERONE_FOUND)
+message(STATUS "libplayerone was not found and will now be built. Please install this libplayerone first before running cmake again to install indi-playerone.")
+endif (WITH_PLAYERONE AND NOT PLAYERONE_FOUND)
 
 message(STATUS "####################################################################################################################################")
 endif (LIBRARIES_FOUND)

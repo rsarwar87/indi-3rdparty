@@ -36,39 +36,31 @@
 
 #include <string.h>
 #include <unistd.h>
+#include <deque>
+#include <memory>
 
 //#define SIMULATION
-#define MAX_DEVICES 16  /* Max device cameraCount */
 
-static int num_wheels;
-static ASIWHEEL *wheels[MAX_DEVICES];
-
-void ASI_EFW_ISInit()
+static class Loader
 {
-    static bool isInit = false;
-    if (!isInit)
-    {
+        std::deque<std::unique_ptr<ASIWHEEL>> wheels;
+    public:
+        Loader()
+        {
 #ifdef SIMULATION
-        num_wheels = 1;
-        EFW_INFO info;
-        info.ID = 1;
-        strncpy(info.Name, "Simulated EFW8", 64);
-        info.slotNum = 0;
-        wheels[0] = new ASIWHEEL(1, info, false);
-        isInit = true;
+            EFW_INFO info;
+            info.ID = 1;
+            strncpy(info.Name, "Simulated EFW8", 64);
+            info.slotNum = 0;
+            wheels.push_back(std::unique_ptr<ASIWHEEL>(new ASIWHEEL(info, info.Name)));
 #else
-        num_wheels = 0;
+            int num_wheels = EFWGetNum();
 
-        num_wheels = EFWGetNum();
-        if (num_wheels > MAX_DEVICES)
-            num_wheels = MAX_DEVICES;
-
-        if (num_wheels <= 0)
-        {
-            IDLog("No ASI EFW detected.");
-        }
-        else
-        {
+            if (num_wheels <= 0)
+            {
+                IDLog("No ASI EFW detected.");
+                return;
+            }
             int num_wheels_ok = 0;
             for (int i = 0; i < num_wheels; i++)
             {
@@ -86,119 +78,34 @@ void ASI_EFW_ISInit()
                     IDLog("ERROR: ASI EFW %d EFWGetProperty error %d.", i + 1, result);
                     continue;
                 }
-                /* Enumerate FWs if more than one ASI EFW is connected */
-                wheels[i] = new ASIWHEEL(id, info, (bool)(num_wheels - 1));
+                std::string name = "ASI " + std::string(info.Name);
+
+                // If we only have a single device connected
+                // then favor the INDIDEV driver label over the auto-generated name above
+                if (num_wheels == 1)
+                {
+                    char *envDev = getenv("INDIDEV");
+                    if (envDev && envDev[0])
+                        name = envDev;
+                }
+                else
+                    name += " " + std::to_string(i);
+                wheels.push_back(std::unique_ptr<ASIWHEEL>(new ASIWHEEL(info, name.c_str())));
                 num_wheels_ok++;
             }
             IDLog("%d ASI EFW attached out of %d detected.", num_wheels_ok, num_wheels);
-            if (num_wheels == num_wheels_ok)
-                isInit = true;
-        }
 #endif
-    }
-}
-
-void ISGetProperties(const char *dev)
-{
-    ASI_EFW_ISInit();
-    for (int i = 0; i < num_wheels; i++)
-    {
-        ASIWHEEL *wheel = wheels[i];
-        if (dev == nullptr || !strcmp(dev, wheel->name))
-        {
-            wheel->ISGetProperties(dev);
-            if (dev != nullptr)
-                break;
         }
-    }
-}
+} loader;
 
-void ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int num)
+ASIWHEEL::ASIWHEEL(const EFW_INFO &info, const char *name)
 {
-    ASI_EFW_ISInit();
-    for (int i = 0; i < num_wheels; i++)
-    {
-        ASIWHEEL *wheel = wheels[i];
-        if (dev == nullptr || !strcmp(dev, wheel->name))
-        {
-            wheel->ISNewSwitch(dev, name, states, names, num);
-            if (dev != nullptr)
-                break;
-        }
-    }
-}
-
-void ISNewText(const char *dev, const char *name, char *texts[], char *names[], int num)
-{
-    ASI_EFW_ISInit();
-    for (int i = 0; i < num_wheels; i++)
-    {
-        ASIWHEEL *wheel = wheels[i];
-        if (dev == nullptr || !strcmp(dev, wheel->name))
-        {
-            wheel->ISNewText(dev, name, texts, names, num);
-            if (dev != nullptr)
-                break;
-        }
-    }
-}
-
-void ISNewNumber(const char *dev, const char *name, double values[], char *names[], int num)
-{
-    ASI_EFW_ISInit();
-    for (int i = 0; i < num_wheels; i++)
-    {
-        ASIWHEEL *wheel = wheels[i];
-        if (dev == nullptr || !strcmp(dev, wheel->name))
-        {
-            wheel->ISNewNumber(dev, name, values, names, num);
-            if (dev != nullptr)
-                break;
-        }
-    }
-}
-
-void ISNewBLOB(const char *dev, const char *name, int sizes[], int blobsizes[], char *blobs[], char *formats[],
-               char *names[], int n)
-{
-    INDI_UNUSED(dev);
-    INDI_UNUSED(name);
-    INDI_UNUSED(sizes);
-    INDI_UNUSED(blobsizes);
-    INDI_UNUSED(blobs);
-    INDI_UNUSED(formats);
-    INDI_UNUSED(names);
-    INDI_UNUSED(n);
-}
-
-void ISSnoopDevice(XMLEle *root)
-{
-    ASI_EFW_ISInit();
-    for (int i = 0; i < num_wheels; i++)
-    {
-        ASIWHEEL *wheel = wheels[i];
-        wheel->ISSnoopDevice(root);
-    }
-}
-
-ASIWHEEL::ASIWHEEL(int id, EFW_INFO info, bool enumerate)
-{
-    char str[MAXINDIDEVICE];
-
-    if (enumerate)
-        snprintf(str, MAXINDIDEVICE, "ASI %s %d", info.Name, id);
-    else
-        snprintf(str, MAXINDIDEVICE, "ASI %s", info.Name);
-
-    fw_id              = id;
+    fw_id              = info.ID;
     CurrentFilter      = 0;
     FilterSlotN[0].min = 0;
     FilterSlotN[0].max = 0;
-    strncpy(name, str, MAXINDIDEVICE);
-    setDeviceName(str);
+    setDeviceName(name);
     setVersion(ASI_VERSION_MAJOR, ASI_VERSION_MINOR);
-
-    LOGF_DEBUG("FW ID: %d FW Name: %s enumerate? %s", id, info.Name, enumerate ? "true" : "false");
 }
 
 ASIWHEEL::~ASIWHEEL()

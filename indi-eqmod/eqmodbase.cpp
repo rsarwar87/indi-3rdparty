@@ -52,9 +52,6 @@ using namespace INDI::AlignmentSubsystem;
 #include <libnova/transform.h>
 #include <libnova/utility.h>
 
-// We declare an auto pointer to EQMod.
-static std::unique_ptr<EQMod> eqmod(new EQMod());
-
 #define GOTO_RATE      2        /* slew rate, degrees/s */
 #define SLEW_RATE      0.5      /* slew rate, degrees/s */
 #define FINE_SLEW_RATE 0.1      /* slew rate, degrees/s */
@@ -71,7 +68,6 @@ static std::unique_ptr<EQMod> eqmod(new EQMod());
 /* Preset Slew Speeds */
 #define SLEWMODES 11
 double slewspeeds[SLEWMODES - 1] = { 1.0, 2.0, 4.0, 8.0, 32.0, 64.0, 128.0, 600.0, 700.0, 800.0 };
-double defaultspeed              = 64.0;
 
 #define RA_AXIS     0
 #define DEC_AXIS    1
@@ -164,8 +160,7 @@ EQMod::EQMod()
     srand(time(nullptr));
     // Others
     AutohomeState      = AUTO_HOME_IDLE;
-    restartguideRAPPEC = false;
-    restartguideDEPPEC = false;
+    restartguidePPEC   = false;
 }
 
 EQMod::~EQMod()
@@ -277,13 +272,15 @@ bool EQMod::initProperties()
 
     for (int i = 0; i < SlewRateSP.nsp - 1; i++)
     {
+        SlewRateSP.sp[i].s = ISS_OFF;
         sprintf(SlewRateSP.sp[i].label, "%.fx", slewspeeds[i]);
         SlewRateSP.sp[i].aux = (void *)&slewspeeds[i];
     }
 
     // Since last item is NOT maximum (but custom), let's set item before custom to SLEWMAX
+    SlewRateSP.sp[SlewRateSP.nsp - 2].s = ISS_ON;
     strncpy(SlewRateSP.sp[SlewRateSP.nsp - 2].name, "SLEW_MAX", MAXINDINAME);
-
+    // Last is custom
     strncpy(SlewRateSP.sp[SlewRateSP.nsp - 1].name, "SLEWCUSTOM", MAXINDINAME);
     strncpy(SlewRateSP.sp[SlewRateSP.nsp - 1].label, "Custom", MAXINDILABEL);
 
@@ -358,10 +355,8 @@ void EQMod::ISGetProperties(const char *dev)
         }
         if (mount->HasPPEC())
         {
-            defineProperty(RAPPECTrainingSP);
-            defineProperty(RAPPECSP);
-            defineProperty(DEPPECTrainingSP);
-            defineProperty(DEPPECSP);
+            defineProperty(PPECTrainingSP);
+            defineProperty(PPECSP);
         }
         if (mount->HasSnapPort1())
         {
@@ -431,10 +426,8 @@ bool EQMod::loadProperties()
     AuxEncoderNP        = getNumber("AUXENCODERVALUES");
     ST4GuideRateNSSP    = getSwitch("ST4_GUIDE_RATE_NS");
     ST4GuideRateWESP    = getSwitch("ST4_GUIDE_RATE_WE");
-    RAPPECTrainingSP    = getSwitch("RA_PPEC_TRAINING");
-    RAPPECSP            = getSwitch("RA_PPEC");
-    DEPPECTrainingSP    = getSwitch("DE_PPEC_TRAINING");
-    DEPPECSP            = getSwitch("DE_PPEC");
+    PPECTrainingSP      = getSwitch("PPEC_TRAINING");
+    PPECSP              = getSwitch("PPEC");
     LEDBrightnessNP     = getNumber("LED_BRIGHTNESS");
     SNAPPORT1SP         = getSwitch("SNAPPORT1");
     SNAPPORT2SP         = getSwitch("SNAPPORT2");
@@ -659,40 +652,23 @@ bool EQMod::updateProperties()
             if (mount->HasPPEC())
             {
                 bool intraining, inppec;
-                defineProperty(RAPPECTrainingSP);
-                defineProperty(RAPPECSP);
-                defineProperty(DEPPECTrainingSP);
-                defineProperty(DEPPECSP);
+                defineProperty(PPECTrainingSP);
+                defineProperty(PPECSP);
                 LOG_INFO("Mount has PPEC.");
-                mount->GetRAPPECStatus(&intraining, &inppec);
+                mount->GetPPECStatus(&intraining, &inppec);
                 if (intraining)
                 {
-                    RAPPECTrainingSP->sp[0].s = ISS_OFF;
-                    RAPPECTrainingSP->sp[1].s = ISS_ON;
-                    RAPPECTrainingSP->s       = IPS_BUSY;
-                    IDSetSwitch(RAPPECTrainingSP, nullptr);
+                    PPECTrainingSP->sp[0].s = ISS_OFF;
+                    PPECTrainingSP->sp[1].s = ISS_ON;
+                    PPECTrainingSP->s       = IPS_BUSY;
+                    IDSetSwitch(PPECTrainingSP, nullptr);
                 }
                 if (inppec)
                 {
-                    RAPPECSP->sp[0].s = ISS_OFF;
-                    RAPPECSP->sp[1].s = ISS_ON;
-                    RAPPECSP->s       = IPS_BUSY;
-                    IDSetSwitch(RAPPECSP, nullptr);
-                }
-                mount->GetDEPPECStatus(&intraining, &inppec);
-                if (intraining)
-                {
-                    DEPPECTrainingSP->sp[0].s = ISS_OFF;
-                    DEPPECTrainingSP->sp[1].s = ISS_ON;
-                    DEPPECTrainingSP->s       = IPS_BUSY;
-                    IDSetSwitch(DEPPECTrainingSP, nullptr);
-                }
-                if (inppec)
-                {
-                    DEPPECSP->sp[0].s = ISS_OFF;
-                    DEPPECSP->sp[1].s = ISS_ON;
-                    DEPPECSP->s       = IPS_BUSY;
-                    IDSetSwitch(DEPPECSP, nullptr);
+                    PPECSP->sp[0].s = ISS_OFF;
+                    PPECSP->sp[1].s = ISS_ON;
+                    PPECSP->s       = IPS_BUSY;
+                    IDSetSwitch(PPECSP, nullptr);
                 }
             }
 
@@ -787,10 +763,8 @@ bool EQMod::updateProperties()
         }
         if (mount->HasPPEC())
         {
-            deleteProperty(RAPPECTrainingSP->name);
-            deleteProperty(RAPPECSP->name);
-            deleteProperty(DEPPECTrainingSP->name);
-            deleteProperty(DEPPECSP->name);
+            deleteProperty(PPECTrainingSP->name);
+            deleteProperty(PPECSP->name);
         }
         if (mount->HasSnapPort1())
         {
@@ -958,20 +932,6 @@ void EQMod::TimerHit()
 
 bool EQMod::ReadScopeStatus()
 {
-    //static struct timeval ltv;
-    //struct timeval tv;
-    //double dt=0;
-
-    /* update elapsed time since last poll, don't presume exactly POLLMS */
-    // gettimeofday (&tv, nullptr);
-
-    //if (ltv.tv_sec == 0 && ltv.tv_usec == 0)
-    //  ltv = tv;
-
-    //dt = tv.tv_sec - ltv.tv_sec + (tv.tv_usec - ltv.tv_usec)/1e6;
-    //ltv = tv;
-    //TODO use dt to track mount desynchronisation/inactivity?
-
     // Time
     double juliandate = 0;
     double lst = 0;
@@ -1018,7 +978,7 @@ bool EQMod::ReadScopeStatus()
 #ifdef WITH_ALIGN_GEEHALEL
         if (align)
         {
-            align->GetAlignedCoords(syncdata, juliandate, &lnobserver, currentRA, currentDEC, &ghalignedRA,
+            align->GetAlignedCoords(syncdata, juliandate, &m_Location, currentRA, currentDEC, &ghalignedRA,
                                     &ghalignedDEC);
             aligned = true;
         }
@@ -1029,22 +989,21 @@ bool EQMod::ReadScopeStatus()
         if (AlignMethodSP.sp[1].s == ISS_ON)
         {
             const char *maligns[3] = { "ZENITH", "NORTH", "SOUTH" };
-            struct ln_equ_posn RaDec;
+            INDI::IEquatorialCoordinates RaDec;
             // Use HA/Dec as  telescope coordinate system
-            RaDec.ra                     = ((lst - currentRA) * 360.0) / 24.0;
-            RaDec.dec                    = currentDEC;
-            TelescopeDirectionVector TDV = TelescopeDirectionVectorFromLocalHourAngleDeclination(RaDec);
+            RaDec.rightascension = currentRA;
+            RaDec.declination = currentDEC;
+            TelescopeDirectionVector TDV = TelescopeDirectionVectorFromEquatorialCoordinates(RaDec);
             DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
                    "Status: Mnt. Algnt. %s Date %lf encoders RA=%ld DE=%ld Telescope RA %lf DEC %lf",
                    maligns[GetApproximateMountAlignment()], juliandate,
                    static_cast<long>(currentRAEncoder), static_cast<long>(currentDEEncoder),
                    currentRA, currentDEC);
             DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT, " Direction RA(deg.)  %lf DEC %lf TDV(x %lf y %lf z %lf)",
-                   RaDec.ra, RaDec.dec, TDV.x, TDV.y, TDV.z);
+                   RaDec.rightascension, RaDec.declination, TDV.x, TDV.y, TDV.z);
             aligned = true;
-            if ((GetAlignmentDatabase().size() < 2) || (!TransformTelescopeToCelestial(TDV, alignedRA, alignedDEC)))
+            if (!TransformTelescopeToCelestial(TDV, alignedRA, alignedDEC))
             {
-                //if (!TransformTelescopeToCelestial( TDV, alignedRA, alignedDEC)) {
                 aligned = false;
                 DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
                        "Failed TransformTelescopeToCelestial: Scope RA=%g Scope DE=%f, Aligned RA=%f DE=%f", currentRA,
@@ -1087,15 +1046,18 @@ bool EQMod::ReadScopeStatus()
         }
 #endif
 
-        lnradec.ra  = (alignedRA * 360.0) / 24.0;
-        lnradec.dec = alignedDEC;
-        /* uses sidereal time, not local sidereal time */
-        ln_get_hrz_from_equ(&lnradec, &lnobserver, juliandate, &lnaltaz);
-        /* libnova measures azimuth from south towards west */
-        horizvalues[0] = range360(lnaltaz.az + 180);
-        horizvalues[1] = lnaltaz.alt;
-        IUUpdateNumber(HorizontalCoordNP, horizvalues, (char **)horiznames, 2);
-        IDSetNumber(HorizontalCoordNP, nullptr);
+        lnradec.rightascension  = alignedRA;
+        lnradec.declination = alignedDEC;
+        // Only update Alt/Az if the scope is not idle.
+        if (TrackState != SCOPE_IDLE && TrackState != SCOPE_PARKED)
+        {
+            /* uses sidereal time, not local sidereal time */
+            INDI::EquatorialToHorizontal(&lnradec, &m_Location, juliandate, &lnaltaz);
+            horizvalues[0] = lnaltaz.azimuth;
+            horizvalues[1] = lnaltaz.altitude;
+            IUUpdateNumber(HorizontalCoordNP, horizvalues, (char **)horiznames, 2);
+            IDSetNumber(HorizontalCoordNP, nullptr);
+        }
 
         steppervalues[0] = currentRAEncoder;
         steppervalues[1] = currentDEEncoder;
@@ -1256,30 +1218,17 @@ bool EQMod::ReadScopeStatus()
 
         if (mount->HasPPEC())
         {
-            if (RAPPECTrainingSP->s == IPS_BUSY)
+            if (PPECTrainingSP->s == IPS_BUSY)
             {
                 bool intraining, inppec;
-                mount->GetRAPPECStatus(&intraining, &inppec);
+                mount->GetPPECStatus(&intraining, &inppec);
                 if (!(intraining))
                 {
-                    LOG_INFO("RA PPEC Training completed.");
-                    RAPPECTrainingSP->sp[0].s = ISS_ON;
-                    RAPPECTrainingSP->sp[1].s = ISS_OFF;
-                    RAPPECTrainingSP->s       = IPS_IDLE;
-                    IDSetSwitch(RAPPECTrainingSP, nullptr);
-                }
-            }
-            if (DEPPECTrainingSP->s == IPS_BUSY)
-            {
-                bool intraining, inppec;
-                mount->GetDEPPECStatus(&intraining, &inppec);
-                if (!(intraining))
-                {
-                    LOG_INFO("DE PPEC Training completed.");
-                    DEPPECTrainingSP->sp[0].s = ISS_ON;
-                    DEPPECTrainingSP->sp[1].s = ISS_OFF;
-                    DEPPECTrainingSP->s       = IPS_IDLE;
-                    IDSetSwitch(DEPPECTrainingSP, nullptr);
+                    LOG_INFO("PPEC Training completed.");
+                    PPECTrainingSP->sp[0].s = ISS_ON;
+                    PPECTrainingSP->sp[1].s = ISS_OFF;
+                    PPECTrainingSP->s       = IPS_IDLE;
+                    IDSetSwitch(PPECTrainingSP, nullptr);
                 }
             }
         }
@@ -1969,8 +1918,8 @@ bool EQMod::Goto(double r, double d)
     double juliandate;
     double lst;
 #ifdef WITH_SCOPE_LIMITS
-    struct ln_equ_posn gotoradec;
-    struct ln_hrz_posn gotoaltaz;
+    INDI::IEquatorialCoordinates gotoradec;
+    INDI::IHorizontalCoordinates gotoaltaz;
     double gotoaz;
     double gotoalt;
 #endif
@@ -1988,14 +1937,11 @@ bool EQMod::Goto(double r, double d)
     lst        = getLst(juliandate, getLongitude());
 
 #ifdef WITH_SCOPE_LIMITS
-    gotoradec.ra  = (r * 360.0) / 24.0;
-    gotoradec.dec = d;
-    /* uses sidereal time, not local sidereal time */
-    /*ln_get_hrz_from_equ_sidereal_time(&lnradec, &lnobserver, lst, &lnaltaz);*/
-    ln_get_hrz_from_equ(&gotoradec, &lnobserver, juliandate, &gotoaltaz);
-    /* libnova measures azimuth from south towards west */
-    gotoaz  = range360(gotoaltaz.az + 180);
-    gotoalt = gotoaltaz.alt;
+    gotoradec.rightascension  = r;
+    gotoradec.declination = d;
+    INDI::EquatorialToHorizontal(&gotoradec, &m_Location, juliandate, &gotoaltaz);
+    gotoaz  = gotoaltaz.azimuth;
+    gotoalt = gotoaltaz.altitude;
     if (horizon)
     {
         if (!horizon->inGotoLimits(gotoaz, gotoalt))
@@ -2023,21 +1969,24 @@ bool EQMod::Goto(double r, double d)
     bool aligned         = false;
 #ifdef WITH_ALIGN_GEEHALEL
     double ghratarget = r, ghdetarget = d;
-    aligned = true;
-    if (align)
+    if (AlignMethodSP.sp[0].s == ISS_ON)
     {
-        align->AlignGoto(syncdata, juliandate, &lnobserver, &ghratarget, &ghdetarget);
-        LOGF_INFO("Aligned Eqmod Goto RA=%g DE=%g (target RA=%g DE=%g)", ghratarget, ghdetarget,
-                  r, d);
-    }
-    else
-    {
-        if (syncdata.lst != 0.0)
+        aligned = true;
+        if (align)
         {
-            ghratarget = gotoparams.ratarget - syncdata.deltaRA;
-            ghdetarget = gotoparams.detarget - syncdata.deltaDEC;
-            LOGF_INFO("Failed Eqmod Goto RA=%g DE=%g (target RA=%g DE=%g)", ghratarget,
-                      ghdetarget, r, d);
+            align->AlignGoto(syncdata, juliandate, &m_Location, &ghratarget, &ghdetarget);
+            LOGF_INFO("Aligned Eqmod Goto RA=%g DE=%g (target RA=%g DE=%g)", ghratarget, ghdetarget,
+                      r, d);
+        }
+        else
+        {
+            if (syncdata.lst != 0.0)
+            {
+                ghratarget = gotoparams.ratarget - syncdata.deltaRA;
+                ghdetarget = gotoparams.detarget - syncdata.deltaDEC;
+                LOGF_INFO("Failed Eqmod Goto RA=%g DE=%g (target RA=%g DE=%g)", ghratarget,
+                          ghdetarget, r, d);
+            }
         }
     }
 #endif
@@ -2046,9 +1995,8 @@ bool EQMod::Goto(double r, double d)
     {
         TelescopeDirectionVector TDV;
         aligned = true;
-        if ((GetAlignmentDatabase().size() < 2) || (!TransformCelestialToTelescope(r, d, 0.0, TDV)))
+        if (!TransformCelestialToTelescope(r, d, 0.0, TDV))
         {
-            //if (!TransformCelestialToTelescope(r, d, 0.0, TDV)) {
             DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
                    "Failed TransformCelestialToTelescope:  RA=%lf DE=%lf, Goto RA=%lf DE=%lf", r, d, gotoparams.ratarget,
                    gotoparams.detarget);
@@ -2060,16 +2008,13 @@ bool EQMod::Goto(double r, double d)
         }
         else
         {
-            struct ln_equ_posn RaDec;
-            LocalHourAngleDeclinationFromTelescopeDirectionVector(TDV, RaDec);
+            INDI::IEquatorialCoordinates RaDec;
+            EquatorialCoordinatesFromTelescopeDirectionVector(TDV, RaDec);
             DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
                    "TransformCelestialToTelescope: RA=%lf DE=%lf, TDV (x :%lf, y: %lf, z: %lf), local hour RA %lf DEC %lf",
-                   r, d, TDV.x, TDV.y, TDV.z, RaDec.ra, RaDec.dec);
-            RaDec.ra = (RaDec.ra * 24.0) / 360.0;
-            RaDec.ra = range24(lst - RaDec.ra);
-
-            gotoparams.ratarget = RaDec.ra;
-            gotoparams.detarget = RaDec.dec;
+                   r, d, TDV.x, TDV.y, TDV.z, RaDec.rightascension, RaDec.declination);
+            gotoparams.ratarget = RaDec.rightascension;
+            gotoparams.detarget = RaDec.declination;
             DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT,
                    "TransformCelestialToTelescope: RA=%lf DE=%lf, Goto RA=%lf DE=%lf", r, d, gotoparams.ratarget,
                    gotoparams.detarget);
@@ -2301,19 +2246,19 @@ bool EQMod::Sync(double ra, double dec)
     if (!isStandardSync())
     {
         AlignmentDatabaseEntry NewEntry;
-        struct ln_equ_posn RaDec;
-        RaDec.ra  = ((lst - tmpsyncdata.telescopeRA) * 360.0) / 24.0;
-        RaDec.dec = tmpsyncdata.telescopeDEC;
+        INDI::IEquatorialCoordinates RaDec;
+        RaDec.rightascension  = tmpsyncdata.telescopeRA;
+        RaDec.declination = tmpsyncdata.telescopeDEC;
         //NewEntry.ObservationJulianDate = ln_get_julian_from_sys();
         NewEntry.ObservationJulianDate = juliandate;
         NewEntry.RightAscension        = ra;
         NewEntry.Declination           = dec;
-        NewEntry.TelescopeDirection    = TelescopeDirectionVectorFromLocalHourAngleDeclination(RaDec);
+        NewEntry.TelescopeDirection    = TelescopeDirectionVectorFromEquatorialCoordinates(RaDec);
         NewEntry.PrivateDataSize       = 0;
         DEBUGF(INDI::AlignmentSubsystem::DBG_ALIGNMENT, "New sync point Date %lf RA %lf DEC %lf TDV(x %lf y %lf z %lf)",
                NewEntry.ObservationJulianDate, NewEntry.RightAscension, NewEntry.Declination,
                NewEntry.TelescopeDirection.x, NewEntry.TelescopeDirection.y, NewEntry.TelescopeDirection.z);
-        if (!CheckForDuplicateSyncPoint(NewEntry))
+        if (!CheckForDuplicateSyncPoint(NewEntry, 0.01))
         {
             GetAlignmentDatabase().push_back(NewEntry);
 
@@ -2323,9 +2268,7 @@ bool EQMod::Sync(double ra, double dec)
             // Tell the math plugin to reinitialise
             Initialise(this);
 
-            //if (GetAlignmentDatabase().size() >= 2)  return true;
         }
-        //if (GetAlignmentDatabase().size() >= 2) return false;
     }
 #endif
 #if defined WITH_ALIGN_GEEHALEL || defined WITH_ALIGN
@@ -2334,7 +2277,7 @@ bool EQMod::Sync(double ra, double dec)
     {
 #ifdef WITH_ALIGN_GEEHALEL
         if (align && isStandardSync())
-            align->AlignStandardSync(syncdata, &tmpsyncdata, &lnobserver);
+            align->AlignStandardSync(syncdata, &tmpsyncdata, &m_Location);
 #endif
         syncdata2 = syncdata;
         syncdata  = tmpsyncdata;
@@ -2370,8 +2313,7 @@ IPState EQMod::GuideNorth(uint32_t ms)
         return IPS_IDLE;
     }
 
-    double rateshift = 0.0;
-    rateshift        = TRACKRATE_SIDEREAL * IUFindNumber(GuideRateNP, "GUIDE_RATE_NS")->value;
+    double rateshift = TRACKRATE_SIDEREAL * IUFindNumber(GuideRateNP, "GUIDE_RATE_NS")->value;
     LOGF_DEBUG("Timed guide North %d ms at rate %g %s", ms, rateshift, DEInverted ? "(Inverted)" : "");
 
     IPState pulseState = IPS_BUSY;
@@ -2380,16 +2322,6 @@ IPState EQMod::GuideNorth(uint32_t ms)
         rateshift = -rateshift;
     try
     {
-        if (mount->HasPPEC())
-        {
-            restartguideDEPPEC = false;
-            if (DEPPECSP->s == IPS_BUSY)
-            {
-                restartguideDEPPEC = true;
-                LOG_INFO("Turning DEC PPEC off while guiding.");
-                mount->TurnDEPPEC(false);
-            }
-        }
         if (ms >= MinPulseTimerN->value)
         {
             pulseInProgress |= 1;
@@ -2414,15 +2346,6 @@ IPState EQMod::GuideNorth(uint32_t ms)
             }
             try
             {
-                if (mount->HasPPEC())
-                {
-                    if (restartguideDEPPEC)
-                    {
-                        restartguideDEPPEC = false;
-                        DEBUGDEVICE(getDeviceName(), INDI::Logger::DBG_SESSION, "Turning DEC PPEC on after guiding.");
-                        mount->TurnDEPPEC(true);
-                    }
-                }
                 mount->StartDETracking(GetDETrackRate());
             }
             catch (EQModError e)
@@ -2463,16 +2386,6 @@ IPState EQMod::GuideSouth(uint32_t ms)
         rateshift = -rateshift;
     try
     {
-        if (mount->HasPPEC())
-        {
-            restartguideDEPPEC = false;
-            if (DEPPECSP->s == IPS_BUSY)
-            {
-                restartguideDEPPEC = true;
-                LOG_INFO("Turning DEC PPEC off while guiding.");
-                mount->TurnDEPPEC(false);
-            }
-        }
         if (ms >= MinPulseTimerN->value)
         {
             pulseInProgress |= 1;
@@ -2497,15 +2410,6 @@ IPState EQMod::GuideSouth(uint32_t ms)
             }
             try
             {
-                if (mount->HasPPEC())
-                {
-                    if (restartguideDEPPEC)
-                    {
-                        restartguideDEPPEC = false;
-                        DEBUGDEVICE(getDeviceName(), INDI::Logger::DBG_SESSION, "Turning DEC PPEC on after guiding.");
-                        mount->TurnDEPPEC(true);
-                    }
-                }
                 mount->StartDETracking(GetDETrackRate());
             }
             catch (EQModError e)
@@ -2547,12 +2451,12 @@ IPState EQMod::GuideEast(uint32_t ms)
     {
         if (mount->HasPPEC())
         {
-            restartguideRAPPEC = false;
-            if (RAPPECSP->s == IPS_BUSY)
+            restartguidePPEC = false;
+            if (PPECSP->s == IPS_BUSY)
             {
-                restartguideRAPPEC = true;
-                LOG_INFO("Turning RA PPEC off while guiding.");
-                mount->TurnRAPPEC(false);
+                restartguidePPEC = true;
+                LOG_INFO("Turning PPEC off while guiding.");
+                mount->TurnPPEC(false);
             }
         }
         if (ms >= MinPulseTimerN->value)
@@ -2581,11 +2485,11 @@ IPState EQMod::GuideEast(uint32_t ms)
             {
                 if (mount->HasPPEC())
                 {
-                    if (restartguideRAPPEC)
+                    if (restartguidePPEC)
                     {
-                        restartguideRAPPEC = false;
-                        DEBUGDEVICE(getDeviceName(), INDI::Logger::DBG_SESSION, "Turning RA PPEC on after guiding.");
-                        mount->TurnRAPPEC(true);
+                        restartguidePPEC = false;
+                        DEBUGDEVICE(getDeviceName(), INDI::Logger::DBG_SESSION, "Turning PPEC on after guiding.");
+                        mount->TurnPPEC(true);
                     }
                 }
                 mount->StartRATracking(GetRATrackRate());
@@ -2630,12 +2534,12 @@ IPState EQMod::GuideWest(uint32_t ms)
     {
         if (mount->HasPPEC())
         {
-            restartguideRAPPEC = false;
-            if (RAPPECSP->s == IPS_BUSY)
+            restartguidePPEC = false;
+            if (PPECSP->s == IPS_BUSY)
             {
-                restartguideRAPPEC = true;
-                LOG_INFO("Turning RA PPEC off while guiding.");
-                mount->TurnRAPPEC(false);
+                restartguidePPEC = true;
+                LOG_INFO("Turning PPEC off while guiding.");
+                mount->TurnPPEC(false);
             }
         }
         if (ms >= MinPulseTimerN->value)
@@ -2664,11 +2568,11 @@ IPState EQMod::GuideWest(uint32_t ms)
             {
                 if (mount->HasPPEC())
                 {
-                    if (restartguideRAPPEC)
+                    if (restartguidePPEC)
                     {
-                        restartguideRAPPEC = false;
-                        DEBUGDEVICE(getDeviceName(), INDI::Logger::DBG_SESSION, "Turning RA PPEC on after guiding.");
-                        mount->TurnRAPPEC(true);
+                        restartguidePPEC = false;
+                        DEBUGDEVICE(getDeviceName(), INDI::Logger::DBG_SESSION, "Turning PPEC on after guiding.");
+                        mount->TurnPPEC(true);
                     }
                 }
                 mount->StartRATracking(GetRATrackRate());
@@ -3221,118 +3125,61 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
 
         if (mount->HasPPEC())
         {
-            if (RAPPECTrainingSP && strcmp(name, RAPPECTrainingSP->name) == 0)
+            if (PPECTrainingSP && strcmp(name, PPECTrainingSP->name) == 0)
             {
-                IUUpdateSwitch(RAPPECTrainingSP, states, names, n);
-                if (RAPPECTrainingSP->sp[1].s == ISS_ON)
+                IUUpdateSwitch(PPECTrainingSP, states, names, n);
+                if (PPECTrainingSP->sp[1].s == ISS_ON)
                 {
                     if (TrackState != SCOPE_TRACKING)
                     {
-                        RAPPECTrainingSP->s = IPS_IDLE;
-                        LOG_WARN("Can not start RA PPEC Training. Scope not tracking");
-                        IUResetSwitch(RAPPECTrainingSP);
-                        RAPPECTrainingSP->sp[0].s = ISS_ON;
-                        RAPPECTrainingSP->sp[1].s = ISS_OFF;
+                        PPECTrainingSP->s = IPS_IDLE;
+                        LOG_WARN("Can not start PPEC Training. Scope not tracking");
+                        IUResetSwitch(PPECTrainingSP);
+                        PPECTrainingSP->sp[0].s = ISS_ON;
+                        PPECTrainingSP->sp[1].s = ISS_OFF;
                     }
                     else
                     {
-                        RAPPECTrainingSP->s = IPS_BUSY;
-                        LOG_INFO("Turning RA PPEC Training on.");
+                        PPECTrainingSP->s = IPS_BUSY;
+                        LOG_INFO("Turning PPEC Training on.");
                         try
                         {
-                            mount->TurnRAPPECTraining(true);
+                            mount->TurnPPECTraining(true);
                         }
                         catch (EQModError e)
                         {
-                            LOG_WARN("Unable to start RA PPEC Training.");
-                            RAPPECTrainingSP->s       = IPS_ALERT;
-                            RAPPECTrainingSP->sp[0].s = ISS_ON;
-                            RAPPECTrainingSP->sp[1].s = ISS_OFF;
+                            LOG_WARN("Unable to start PPEC Training.");
+                            PPECTrainingSP->s       = IPS_ALERT;
+                            PPECTrainingSP->sp[0].s = ISS_ON;
+                            PPECTrainingSP->sp[1].s = ISS_OFF;
                         }
                     }
                 }
                 else
                 {
-                    RAPPECTrainingSP->s = IPS_IDLE;
-                    LOG_INFO("Turning RA PPEC Training off.");
-                    mount->TurnRAPPECTraining(false);
+                    PPECTrainingSP->s = IPS_IDLE;
+                    LOG_INFO("Turning PPEC Training off.");
+                    mount->TurnPPECTraining(false);
                 }
-                IDSetSwitch(RAPPECTrainingSP, nullptr);
+                IDSetSwitch(PPECTrainingSP, nullptr);
                 return true;
             }
-            if (RAPPECSP && strcmp(name, RAPPECSP->name) == 0)
+            if (PPECSP && strcmp(name, PPECSP->name) == 0)
             {
-                IUUpdateSwitch(RAPPECSP, states, names, n);
-                if (RAPPECSP->sp[1].s == ISS_ON)
+                IUUpdateSwitch(PPECSP, states, names, n);
+                if (PPECSP->sp[1].s == ISS_ON)
                 {
-                    RAPPECSP->s = IPS_BUSY;
-                    LOG_INFO("Turning RA PPEC on.");
-                    mount->TurnRAPPEC(true);
+                    PPECSP->s = IPS_BUSY;
+                    LOG_INFO("Turning PPEC on.");
+                    mount->TurnPPEC(true);
                 }
                 else
                 {
-                    RAPPECSP->s = IPS_IDLE;
-                    LOG_INFO("Turning RA PPEC off.");
-                    mount->TurnRAPPEC(false);
+                    PPECSP->s = IPS_IDLE;
+                    LOG_INFO("Turning PPEC off.");
+                    mount->TurnPPEC(false);
                 }
-                IDSetSwitch(RAPPECSP, nullptr);
-                return true;
-            }
-            if (DEPPECTrainingSP && strcmp(name, DEPPECTrainingSP->name) == 0)
-            {
-                IUUpdateSwitch(DEPPECTrainingSP, states, names, n);
-                if (DEPPECTrainingSP->sp[1].s == ISS_ON)
-                {
-                    if (TrackState != SCOPE_TRACKING)
-                    {
-                        DEPPECTrainingSP->s = IPS_IDLE;
-                        LOG_WARN("Can not start DEC PPEC Training. Scope not tracking");
-                        IUResetSwitch(DEPPECTrainingSP);
-                        DEPPECTrainingSP->sp[0].s = ISS_ON;
-                        DEPPECTrainingSP->sp[1].s = ISS_OFF;
-                    }
-                    else
-                    {
-                        DEPPECTrainingSP->s = IPS_BUSY;
-                        LOG_INFO("Turning DEC PPEC Training on.");
-                        try
-                        {
-                            mount->TurnDEPPECTraining(true);
-                        }
-                        catch (EQModError e)
-                        {
-                            LOG_WARN("Unable to start DEC PPEC Training.");
-                            DEPPECTrainingSP->s       = IPS_ALERT;
-                            DEPPECTrainingSP->sp[0].s = ISS_ON;
-                            DEPPECTrainingSP->sp[1].s = ISS_OFF;
-                        }
-                    }
-                }
-                else
-                {
-                    DEPPECTrainingSP->s = IPS_IDLE;
-                    LOG_INFO("Turning DEC PPEC Training off.");
-                    mount->TurnDEPPECTraining(false);
-                }
-                IDSetSwitch(DEPPECTrainingSP, nullptr);
-                return true;
-            }
-            if (DEPPECSP && strcmp(name, DEPPECSP->name) == 0)
-            {
-                IUUpdateSwitch(DEPPECSP, states, names, n);
-                if (DEPPECSP->sp[1].s == ISS_ON)
-                {
-                    DEPPECSP->s = IPS_BUSY;
-                    LOG_INFO("Turning DEC PPEC on.");
-                    mount->TurnDEPPEC(true);
-                }
-                else
-                {
-                    DEPPECSP->s = IPS_IDLE;
-                    LOG_INFO("Turning DEC PPEC off.");
-                    mount->TurnDEPPEC(false);
-                }
-                IDSetSwitch(DEPPECSP, nullptr);
+                IDSetSwitch(PPECSP, nullptr);
                 return true;
             }
         }
@@ -3842,15 +3689,6 @@ void EQMod::timedguideNSCallback(void *userpointer)
 
     try
     {
-        if (p->mount->HasPPEC())
-        {
-            if (p->restartguideDEPPEC)
-            {
-                p->restartguideDEPPEC = false;
-                DEBUGDEVICE(p->getDeviceName(), INDI::Logger::DBG_SESSION, "Turning DEC PPEC on after guiding.");
-                p->mount->TurnDEPPEC(true);
-            }
-        }
         p->mount->StartDETracking(p->GetDETrackRate());
     }
     catch (EQModError e)
@@ -3875,11 +3713,11 @@ void EQMod::timedguideWECallback(void *userpointer)
     {
         if (p->mount->HasPPEC())
         {
-            if (p->restartguideRAPPEC)
+            if (p->restartguidePPEC)
             {
-                p->restartguideRAPPEC = false;
-                DEBUGDEVICE(p->getDeviceName(), INDI::Logger::DBG_SESSION, "Turning RA PPEC on after guiding.");
-                p->mount->TurnRAPPEC(true);
+                p->restartguidePPEC = false;
+                DEBUGDEVICE(p->getDeviceName(), INDI::Logger::DBG_SESSION, "Turning PPEC on after guiding.");
+                p->mount->TurnPPEC(true);
             }
         }
         p->mount->StartRATracking(p->GetRATrackRate());
@@ -3919,14 +3757,14 @@ From // // http://www.whim.org/nebula/math/pdf/twostar.pdf
     char s2trasexa[13], s2tdecsexa[13];
     char s2rasexa[13], s2decsexa[13];
 
-    alpha1  = ln_deg_to_rad((s1.telescopeRA - s1.lst) * 360.0 / 24.0);
-    delta1  = ln_deg_to_rad(s1.telescopeDEC);
-    alpha2  = ln_deg_to_rad((s2.telescopeRA - s2.lst) * 360.0 / 24.0);
-    delta2  = ln_deg_to_rad(s2.telescopeDEC);
-    calpha1 = ln_deg_to_rad((s1.targetRA - s1.lst) * 360.0 / 24.0);
-    cdelta1 = ln_deg_to_rad(s1.targetDEC);
-    calpha2 = ln_deg_to_rad((s2.targetRA - s2.lst) * 360.0 / 24.0);
-    cdelta2 = ln_deg_to_rad(s2.targetDEC);
+    alpha1  = DEG_TO_RAD((s1.telescopeRA - s1.lst) * 360.0 / 24.0);
+    delta1  = DEG_TO_RAD(s1.telescopeDEC);
+    alpha2  = DEG_TO_RAD((s2.telescopeRA - s2.lst) * 360.0 / 24.0);
+    delta2  = DEG_TO_RAD(s2.telescopeDEC);
+    calpha1 = DEG_TO_RAD((s1.targetRA - s1.lst) * 360.0 / 24.0);
+    cdelta1 = DEG_TO_RAD(s1.targetDEC);
+    calpha2 = DEG_TO_RAD((s2.targetRA - s2.lst) * 360.0 / 24.0);
+    cdelta2 = DEG_TO_RAD(s2.targetDEC);
 
     if ((calpha2 == calpha1) || (alpha1 == alpha2))
         return;
@@ -3990,15 +3828,15 @@ From // // http://www.whim.org/nebula/math/pdf/twostar.pdf
     LOGF_DEBUG("Computed Telescope polar alignment (rad): delta(dec) = %g alpha(ha) = %g",
                tpadelta, tpaalpha);
 
-    beta    = ln_deg_to_rad(lat);
+    beta    = DEG_TO_RAD(lat);
     *tpaalt = asin(sin(tpadelta) * sin(beta) + (cos(tpadelta) * cos(beta) * cos(tpaalpha)));
     cosaz   = (sin(tpadelta) - (sin(*tpaalt) * sin(beta))) / (cos(*tpaalt) * cos(beta));
     sinaz   = (cos(tpadelta) * sin(tpaalpha)) / cos(*tpaalt);
     //*tpaaz = acos(cosaz);
     //if (sinaz < 0) *tpaaz = 2 * M_PI - *tpaaz;
     *tpaaz  = atan2(sinaz, cosaz);
-    *tpaalt = ln_rad_to_deg(*tpaalt);
-    *tpaaz  = ln_rad_to_deg(*tpaaz);
+    *tpaalt = RAD_TO_DEG(*tpaalt);
+    *tpaaz  = RAD_TO_DEG(*tpaaz);
     LOGF_DEBUG("Computed Telescope polar alignment (deg): alt = %g az = %g", *tpaalt, *tpaaz);
 
     starPolarAlign(s2.lst, s2.targetRA, s2.targetDEC, (M_PI / 2) - tpaalpha, (M_PI / 2) - tpadelta, &s2tra, &s2tdec);
@@ -4089,13 +3927,10 @@ void EQMod::starPolarAlign(double lst, double ra, double dec, double theta, doub
 
 bool EQMod::updateLocation(double latitude, double longitude, double elevation)
 {
-    INDI_UNUSED(elevation);
-    // JM: INDI Longitude is 0 to 360 increasing EAST. libnova East is Positive, West is negative
-    lnobserver.lng = longitude;
+    m_Location.longitude = longitude;
+    m_Location.latitude  = latitude;
+    m_Location.elevation = elevation;
 
-    if (lnobserver.lng > 180)
-        lnobserver.lng -= 360;
-    lnobserver.lat = latitude;
     if (latitude < 0.0)
         SetSouthernHemisphere(true);
     else
@@ -4105,7 +3940,15 @@ bool EQMod::updateLocation(double latitude, double longitude, double elevation)
     // Set this according to mount type
     SetApproximateMountAlignmentFromMountType(EQUATORIAL);
 #endif
-    LOGF_INFO("updateLocation: long = %g lat = %g", lnobserver.lng, lnobserver.lat);
+    // Make display longitude to be in the standard 0 to +180 East, and 0 to -180 West.
+    // No need to confuse new users with INDI format.
+    char lat_str[MAXINDIFORMAT] = {0}, lng_str[MAXINDIFORMAT] = {0};
+    double display_longitude = longitude > 180 ? longitude - 360 : longitude;
+    fs_sexa(lat_str, m_Location.latitude, 2, 36000);
+    fs_sexa(lng_str, display_longitude, 2, 36000);
+    // Choose WGS 84, also known as EPSG:4326 for latitude/longitude ordering
+    LOGF_INFO("Observer location updated: Latitude %.12s (%.2f) Longitude %.12s (%.2f)", lat_str, m_Location.latitude, lng_str,
+              display_longitude);
     return true;
 }
 
@@ -4161,8 +4004,7 @@ bool EQMod::saveConfigItems(FILE *fp)
         IUSaveConfigNumber(fp, LEDBrightnessNP);
     if (HasPECState())
     {
-        IUSaveConfigSwitch(fp, RAPPECSP);
-        IUSaveConfigSwitch(fp, DEPPECSP);
+        IUSaveConfigSwitch(fp, PPECSP);
     }
 #ifdef _KOHERON
 	IUSaveConfigSwitch(fp, &ServerDebugSP);
