@@ -324,8 +324,8 @@ void Skywatcher::Init()
 #ifdef _KOHERON
         RAStepInit = koheron_interface->SwpGetAxisPosition(Axis1);
         DEStepInit = koheron_interface->SwpGetAxisPosition(Axis2);
-        RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
-        DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
+        //RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
+        //DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
 //        RAStepInit     = 0x0;
 //        DEStepInit     = 0x0;
         if (RAStepInit == 0xFFFFFFFF || DEStepInit == 0xFFFFFFFF)
@@ -375,8 +375,10 @@ void Skywatcher::Init()
         DEStepInit     = koheron_interface->SwpGetAxisPosition(Axis2);
         RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
         DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
-        //RAStepInit     = 0x0;
-        //DEStepInit     = 0x0;
+        RAStepInit     = 0x800000;
+        DEStepInit     = 0x800000;
+        StopMotor(Axis2);
+        StopMotor(Axis1);
 #endif
         RAStepHome     = RAStepInit;
         DEStepHome     = DEStepInit + (DESteps360 / 4);
