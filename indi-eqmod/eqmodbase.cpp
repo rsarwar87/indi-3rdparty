@@ -3276,62 +3276,12 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
             {
 	              mount->koheron_interface->save_config();
                 KoheronReadSettings();
-                //MinimumPeriodN[0].value = DeviceValN[0].value;
-                //MaximumPeriodN[1].value = DeviceValN[1].value;
-                //ModeN[0].value = DeviceValN[2].value;
-                //if (DeviceValN[9].value == 1)
-                //{
-                //  MotorTypeS[0].s = ISS_OFF;
-                //  MotorTypeS[1].s = ISS_ON;
-                //}
-                //else
-                //{
-                //  MotorTypeS[0].s = ISS_ON;
-                //  MotorTypeS[1].s = ISS_OFF;
-                //}
-                //StepsPerRotationN[0].value = DeviceValN[8].value; //ret_p[1];
-                //StepsPerRotationN[1].value = DeviceValN[4].value; //ret_p[0];
-                //StepsPerRotationN[2].value = DeviceValN[5].value; //ret_p[3];
-                //StepsPerRotationN[3].value = DeviceValN[6].value; //ret_p[4];
-                //StepsPerRotationN[4].value = DeviceValN[7].value; //ret_p[2];
                 SaveDeviceS[1].s = ISS_ON;
                 LOG_INFO("Restored current values from device values.");
                 IDSetSwitch(&SaveDeviceeValSP, nullptr);
             }
             if (SaveDeviceS[2].s == ISS_ON)
             {
-                //if (MotorTypeS[0].s == ISS_ON)
-                //{
-	              //    mount->koheron_interface->SwpSetMotorType(0, false);
-	              //    mount->koheron_interface->SwpSetMotorType(1, false);
-	              //    mount->koheron_interface->SwpSetMotorType(2, false);
-                //    MotorTypeSP.s = IPS_OK;
-                //    DEBUG(INDI::Logger::DBG_SESSION, "Enable DRV8825.");
-                //}
-
-                //if (MotorTypeS[1].s == ISS_ON)
-                //{
-	              //    mount->koheron_interface->SwpSetMotorType(0, true);
-	              //    mount->koheron_interface->SwpSetMotorType(1, true);
-	              //    mount->koheron_interface->SwpSetMotorType(2, true);
-                //    MotorTypeSP.s = IPS_OK;
-                //    DEBUG(INDI::Logger::DBG_SESSION, "Enable TMC2226.");
-                //}
-
-                //mount->koheron_interface->set_motor_mode(0, 0, ModeN[0].value);
-                //mount->koheron_interface->set_motor_mode(1, 0, ModeN[0].value);
-                //mount->koheron_interface->set_motor_mode(2, 0, ModeN[0].value);
-                //mount->koheron_interface->set_motor_mode(0, 1, ModeN[0].value);
-                //mount->koheron_interface->set_motor_mode(1, 1, ModeN[0].value);
-                //mount->koheron_interface->set_motor_mode(2, 1, ModeN[0].value);
-                //mount->koheron_interface->set_steps_per_rotation_params(1, StepsPerRotationN[0].value
-                //    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
-                //    , StepsPerRotationN[2].value);
-                //mount->koheron_interface->set_steps_per_rotation_params(0, StepsPerRotationN[0].value
-                //    , StepsPerRotationN[1].value, StepsPerRotationN[4].value, StepsPerRotationN[3].value
-                //    , StepsPerRotationN[2].value);
-
-                
                 KoheronReadSettings();
                 SaveDeviceS[1].s = ISS_ON;
                 LOG_INFO("Sent new settings for koheron device.");
