@@ -322,12 +322,6 @@ void Skywatcher::Init()
     {
         //Read initial stepper values
 #ifdef _KOHERON
-        RAStepInit = koheron_interface->SwpGetAxisPosition(Axis1);
-        DEStepInit = koheron_interface->SwpGetAxisPosition(Axis2);
-        //RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
-        //DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
-//        RAStepInit     = 0x0;
-//        DEStepInit     = 0x0;
         if (RAStepInit == 0xFFFFFFFF || DEStepInit == 0xFFFFFFFF)
         {
             koheron_interface->print_error(__func__, " Invalid AxisPosition: Axis");
@@ -344,6 +338,8 @@ void Skywatcher::Init()
             koheron_interface->print_error(__func__, " SwpSetAxisPSwpCmdInitializeosition failed: Axis");
             throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to initialize: Axis%u", __func__, Axis2);
         }
+        RAStepInit = koheron_interface->SwpGetAxisPosition(Axis1);
+        DEStepInit = koheron_interface->SwpGetAxisPosition(Axis2);
 #else
         dispatch_command(GetAxisPosition, Axis1, nullptr);
         //read_eqmod();
@@ -371,12 +367,6 @@ void Skywatcher::Init()
         RAStepInit     = 0x800000;
         DEStepInit     = 0x800000;
 #ifdef _KOHERON
-        RAStepInit     = koheron_interface->SwpGetAxisPosition(Axis1);
-        DEStepInit     = koheron_interface->SwpGetAxisPosition(Axis2);
-        RAStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis1)/2;
-        DEStepInit     = koheron_interface->SwpGetGridPerRevolution(Axis2)/2;
-        RAStepInit     = 0x800000;
-        DEStepInit     = 0x800000;
         StopMotor(Axis2);
         StopMotor(Axis1);
 #endif
