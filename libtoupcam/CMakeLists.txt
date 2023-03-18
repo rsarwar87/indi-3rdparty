@@ -1,8 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
 project (libtoupcam)
 
-# Using ToupCamera SDK Version: 49.19023.20210608
-set (LIBTOUPCAM_VERSION "1.49.1")
+# Using ToupCamera SDK Version: 53.22004.20230115
+set (LIBTOUPCAM_VERSION "1.53.2")
 set (LIBTOUPCAM_SOVERSION "1")
 
 list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
@@ -17,6 +17,8 @@ set_target_properties (toupcam PROPERTIES VERSION ${LIBTOUPCAM_VERSION} SOVERSIO
 if (APPLE)
 
   set_property (TARGET toupcam PROPERTY IMPORTED_LOCATION "mac/libtoupcam.bin")
+
+  FIX_LIBRARY_ID("libtoupcam" "mac/libtoupcam.bin" "TOUPCAM")
 
 elseif (UNIX AND NOT WIN32)
 

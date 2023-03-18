@@ -297,8 +297,11 @@ bool EQMod::initProperties()
 
     // Force the alignment system to always be on
     getSwitch("ALIGNMENT_SUBSYSTEM_ACTIVE")->sp[0].s = ISS_ON;
-
 #endif
+
+    tcpConnection->setDefaultHost("192.168.4.1");
+    tcpConnection->setDefaultPort(11880);
+    tcpConnection->setConnectionType(Connection::TCP::TYPE_UDP);
 
     addAuxControls();
     return true;
@@ -847,7 +850,8 @@ bool EQMod::Handshake()
     }
     catch (EQModError &e)
     {
-        return (e.DefaultHandleException(this));
+        return false;
+        //return (e.DefaultHandleException(this));
     }
 
 #ifdef WITH_ALIGN
@@ -1093,7 +1097,7 @@ bool EQMod::ReadScopeStatus()
                        AlignedDEString,
                        AZString,
                        ALString,
-                       pierSide == PIER_EAST ? "East" : (pierSide == PIER_WEST ? "West" : "Uknown"));
+                       pierSide == PIER_EAST ? "East" : (pierSide == PIER_WEST ? "West" : "Unknown"));
         }
 
         if (mount->HasAuxEncoders())
@@ -1164,10 +1168,8 @@ bool EQMod::ReadScopeStatus()
                         }
                         else
                         {
-                            ISState state;
                             sw    = IUFindOnSwitch(TrackDefaultSP);
                             name  = sw->name;
-                            state = ISS_ON;
                             mount->StartRATracking(GetDefaultRATrackRate());
                             mount->StartDETracking(GetDefaultDETrackRate());
 
@@ -1916,7 +1918,6 @@ bool EQMod::gotoInProgress()
 bool EQMod::Goto(double r, double d)
 {
     double juliandate;
-    double lst;
 #ifdef WITH_SCOPE_LIMITS
     INDI::IEquatorialCoordinates gotoradec;
     INDI::IHorizontalCoordinates gotoaltaz;
@@ -1934,7 +1935,6 @@ bool EQMod::Goto(double r, double d)
     }
 
     juliandate = getJulianDate();
-    lst        = getLst(juliandate, getLongitude());
 
 #ifdef WITH_SCOPE_LIMITS
     gotoradec.rightascension  = r;
@@ -3510,7 +3510,7 @@ bool EQMod::MoveNS(INDI_DIR_NS dir, TelescopeMotionCommand command)
                 if (DEInverted)
                     rate = -rate;
                 mount->SlewDE(rate);
-                TrackState = SCOPE_SLEWING;
+                //TrackState = SCOPE_SLEWING;
                 break;
 
             case MOTION_STOP:
@@ -3558,7 +3558,7 @@ bool EQMod::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
                 if (RAInverted)
                     rate = -rate;
                 mount->SlewRA(rate);
-                TrackState = SCOPE_SLEWING;
+                //TrackState = SCOPE_SLEWING;
                 break;
 
             case MOTION_STOP:

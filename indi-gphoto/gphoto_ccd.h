@@ -79,6 +79,9 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         bool AbortExposure() override;
         bool UpdateCCDFrame(int x, int y, int w, int h) override;
 
+	// enable binning
+	bool UpdateCCDBin(int hor, int ver) override;
+
         virtual bool ISNewNumber(const char * dev, const char * name, double values[], char * names[], int n) override;
         virtual bool ISNewSwitch(const char * dev, const char * name, ISState * states, char * names[], int n) override;
         virtual bool ISNewText(const char * dev, const char * name, char * texts[], char * names[], int n) override;
@@ -95,8 +98,11 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
     protected:
         // Misc.
         bool saveConfigItems(FILE * fp) override;
-        void addFITSKeywords(fitsfile * fptr, INDI::CCDChip * targetChip) override;
+        void addFITSKeywords(INDI::CCDChip * targetChip) override;
         void TimerHit() override;
+
+        // Capture format
+        bool SetCaptureFormat(uint8_t index) override;
 
         // Simulation Triggered
         void simulationTriggered(bool enabled) override;
@@ -170,6 +176,9 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
         int liveVideoWidth  {-1};
         int liveVideoHeight {-1};
 
+	// binning ?
+	bool binning { false };
+
         ISwitch mConnectS[2];
         ISwitchVectorProperty mConnectSP;
         IText mPortT[1] {};
@@ -183,16 +192,6 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
 
         ISwitch * mIsoS = nullptr;
         ISwitchVectorProperty mIsoSP;
-        ISwitch * mFormatS = nullptr;
-        ISwitchVectorProperty mFormatSP;
-
-        ISwitchVectorProperty TransferFormatSP;
-        ISwitch TransferFormatS[2];
-        enum
-        {
-            FORMAT_FITS,
-            FORMAT_NATIVE
-        };
 
         ISwitch captureTargetS[2];
         ISwitchVectorProperty captureTargetSP;
@@ -202,12 +201,14 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
             CAPTURE_SD_CARD
         };
 
-        ISwitch SDCardImageS[2];
+        ISwitch SDCardImageS[3];
         ISwitchVectorProperty SDCardImageSP;
         enum
         {
             SD_CARD_SAVE_IMAGE,
-            SD_CARD_DELETE_IMAGE
+            SD_CARD_DELETE_IMAGE,
+            SD_CARD_IGNORE_IMAGE,
+
         };
 
         ISwitch autoFocusS[1];
@@ -238,6 +239,8 @@ class GPhotoCCD : public INDI::CCD, public INDI::FocuserInterface
 
         // Threading
         std::thread liveViewThread;
+
+        std::map <uint8_t, uint8_t> m_CaptureFormatMap;
 
         static constexpr double MINUMUM_CAMERA_TEMPERATURE = -60.0;
 

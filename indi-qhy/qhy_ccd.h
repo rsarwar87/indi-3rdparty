@@ -88,7 +88,7 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
         virtual void TimerHit() override;
         virtual bool saveConfigItems(FILE *fp) override;
         virtual const char *getDefaultName() override;
-        void addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip) override;
+        void addFITSKeywords(INDI::CCDChip *targetChip) override;
 
         /////////////////////////////////////////////////////////////////////////////
         /// Camera Properties
@@ -100,6 +100,19 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
         // SDK Version
         ITextVectorProperty SDKVersionTP;
         IText SDKVersionT[1] {};
+        /////////////////////////////////////////////////////////////////////////////
+        /// Properties: Binning Support
+        /////////////////////////////////////////////////////////////////////////////
+
+        bool m_SupportedBins[4];
+		enum
+		{
+		Bin1x1,
+		Bin2x2,
+		Bin3x3,
+		Bin4x4,
+		};
+
 
         // Cooler Switch
         ISwitchVectorProperty CoolerSP;

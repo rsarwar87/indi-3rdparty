@@ -1,8 +1,8 @@
 cmake_minimum_required (VERSION 3.0)
 project (libatik)
 
-# Built October 19th, 2021 - SDK API 2020.10.19
-set (ATIK_VERSION "2.2.9")
+# Built November 11th, 2021 - SDK API 2021.11.02.862
+set (ATIK_VERSION "2.2.10")
 set (ATIK_SOVERSION "2")
 
 set (FLYCAPTURE_VERSION "2.13.3.31")
@@ -20,6 +20,8 @@ set_target_properties (atikcameras PROPERTIES VERSION ${ATIK_VERSION} SOVERSION 
 if (APPLE)
 
   set_property (TARGET atikcameras  PROPERTY IMPORTED_LOCATION "mac/libatikcameras.bin")
+
+  FIX_LIBRARY_ID("libatikcameras" "mac/libatikcameras.bin" "ATIK")
   
   # Install library
   install_imported (TARGETS atikcameras DESTINATION ${CMAKE_INSTALL_LIBDIR})

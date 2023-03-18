@@ -1,7 +1,7 @@
 %define __cmake_in_source_build %{_vpath_builddir}
 
 Name: libplayerone
-Version:1.9.3.git
+Version:2.0.0.git
 Release: %(date -u +%%Y%%m%%d%%H%%M%%S)%{?dist}
 Summary: Instrument Neutral Distributed Interface 3rd party drivers
 
@@ -15,9 +15,10 @@ Source0: https://github.com/indilib/indi-3rdparty/archive/master.tar.gz
 %define __find_requires %{nil}
 
 Provides: libPlayerOneCamera.so
-
+Provides: libPlayerOnePW.so
 
 Provides: libPlayerOneCamera.so()(64bit)
+Provides: libPlayerOnePW.so()(64bit)
 
 
 BuildRequires: cmake
@@ -61,7 +62,7 @@ data acquisition, monitoring, and a lot more. This is a 3rd party driver.
 
 
 %prep -v
-%setup -n %{name}-%{version}
+%autosetup -v -p1 -n indi-3rdparty-master
 
 %build
 # This package tries to mix and match PIE and PIC which is wrong and will
@@ -69,12 +70,12 @@ data acquisition, monitoring, and a lot more. This is a 3rd party driver.
 # Disable LTO
 %define _lto_cflags %{nil}
 
-cd libasi
+cd libplayerone
 %cmake .
 make VERBOSE=1 %{?_smp_mflags} -j4
 
 %install
-cd libasi
+cd libplayerone
 find %buildroot -type f \( -name '*.so' -o -name '*.so.*' \) -exec chmod 755 {} +
 make DESTDIR=%{buildroot} install
 
@@ -86,6 +87,21 @@ make DESTDIR=%{buildroot} install
 %license libplayerone/license.txt
 
 %changelog
+* Wed Jan 18 2023 Hiroshi Saito <hiro3110g@gmail.com>
+- add PlayerOne Filter Wheel driver
+- update PlayerOneCamera SDK to v3.1.1
+* Thu Dec 15 2022 Hiroshi Saito <hiro3110g@gmail.com>
+- update PlayerOneCamera SDK to v3.1.0
+* Tue Sep 13 2022 Hiroshi Saito <hiro3110g@gmail.com>
+- update PlayerOneCamera SDK to v3.0.4
+* Sat Jul 02 2022 Hiroshi Saito <hiro3110g@gmail.com>
+- update PlayerOneCamera SDK to v3.0.3
+* Thu Jun 16 2022 Hiroshi Saito <hiro3110g@gmail.com>
+- update PlayerOneCamera SDK to v3.0.2
+* Tue Mar 30 2022 Hiroshi Saito <hiro3110g@gmail.com>
+- update PlayerOneCamera SDK to v2.0.6
+* Tue Dec 07 2021 Hiroshi Saito <hiro3110g@gmail.com>
+- update PlayerOneCamera SDK to v2.0.5
 * Sat Aug 21 2021 Hiroshi Saito <hiro3110g@gmail.com>
 - create indi driver for PlayerOne Cameras which is based on ASI Cameras
 

@@ -1,6 +1,6 @@
 %define __cmake_in_source_build %{_vpath_builddir}
 Name: indi-toupbase
-Version:1.9.3.git
+Version:2.0.0.git
 Release: %(date -u +%%Y%%m%%d%%H%%M%%S)%{?dist}
 Summary: Instrument Neutral Distributed Interface 3rd party drivers
 
@@ -48,6 +48,7 @@ BuildRequires: libtoupcam
 BuildRequires: libstarshootg
 BuildRequires: libnncam
 BuildRequires: libmallincam
+BuildRequires: libomegonprocam
 
 
 %description
@@ -58,7 +59,7 @@ data acquisition, monitoring, and a lot more. This is a 3rd party driver.
 
 
 %prep -v
-%setup -n %{name}-%{version}
+%autosetup -v -p1 -n indi-3rdparty-master
 
 %build
 # This package tries to mix and match PIE and PIC which is wrong and will
@@ -81,4 +82,5 @@ make DESTDIR=%{buildroot} install
 %changelog
 * Sun Jul 19 2020 Jim Howard <jh.xsnrg+fedora@gmail.com> 1.8.7.git-1
 - update to build from git for copr, credit to Sergio Pascual and Christian Dersch for prior work on spec files
+- added Omegon SDK based toupcam driver. 2022-05-27 
 

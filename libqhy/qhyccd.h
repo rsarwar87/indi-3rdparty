@@ -34,6 +34,7 @@ EXPORTC void STDCALL SetQHYCCDBufferNumber(uint32_t BufNumber);
 #endif
 
 EXPORTC void STDCALL EnableQHYCCDMessage(bool enable);
+EXPORTC void STDCALL set_histogram_equalization(bool enable);
 EXPORTC void STDCALL EnableQHYCCDLogFile(bool enable);
 
 
@@ -384,9 +385,11 @@ EXPORTC	uint32_t STDCALL GetQHYCCDCFWStatus(qhyccd_handle *handle,char *status);
 EXPORTC	uint32_t STDCALL IsQHYCCDCFWPlugged(qhyccd_handle *handle);
 
 //Get the number of triger mode for camera
-EXPORTC uint32_t STDCALL GetQHYCCDTrigerModeNumber(qhyccd_handle *handle, uint32_t *modeNumber);
+EXPORTC uint32_t STDCALL GetQHYCCDTrigerInterfaceNumber(qhyccd_handle *handle, uint32_t *modeNumber);
 //Get the name of for every triger mode 
-EXPORTC uint32_t STDCALL GetQHYCCDTrigerModeName(qhyccd_handle *handle, uint32_t modeNumber, char *name);
+EXPORTC uint32_t STDCALL GetQHYCCDTrigerInterfaceName(qhyccd_handle *handle, uint32_t modeNumber, char *name);
+//Setup triger interface
+EXPORTC uint32_t STDCALL SetQHYCCDTrigerInterface(qhyccd_handle *handle, uint32_t trigerMode);
 //Setup triger-in mode on/off
 EXPORTC uint32_t STDCALL SetQHYCCDTrigerFunction(qhyccd_handle *h,bool value);
 /**
@@ -402,6 +405,7 @@ another QHYCCD_ERROR code on other failures
 EXPORTC uint32_t STDCALL SetQHYCCDTrigerMode(qhyccd_handle *handle,uint32_t trigerMode);
 //Setup triger-out mode on/off
 EXPORTC uint32_t STDCALL EnableQHYCCDTrigerOut(qhyccd_handle *handle);
+EXPORTC uint32_t STDCALL EnableQHYCCDTrigerOutA(qhyccd_handle *handle);
 //Send software triger-in signal to camera
 EXPORTC uint32_t STDCALL SendSoftTriger2QHYCCDCam(qhyccd_handle *handle);
 
@@ -752,7 +756,8 @@ EXPORTC void STDCALL SetQHYCCDGPSSlaveModeParameter(qhyccd_handle *handle,uint32
 
 EXPORTC void STDCALL SetQHYCCDQuit();
 
-EXPORTC uint32_t STDCALL QHYCCDVendRequestWrite(qhyccd_handle *h,uint8_t req,uint16_t value,uint16_t index1,uint32_t length,uint8_t *data);
+EXPORTC uint32_t STDCALL QHYCCDVendRequestWrite(qhyccd_handle *h, uint8_t req, uint16_t value, uint16_t index1, uint32_t length, uint8_t *data);
+EXPORTC uint32_t STDCALL QHYCCDVendRequestRead(qhyccd_handle *h, uint8_t req, uint16_t value, uint16_t index1, uint32_t length, uint8_t *data);
 
 EXPORTC uint32_t STDCALL QHYCCDReadUSB_SYNC(qhyccd_handle *pDevHandle, uint8_t endpoint, uint32_t length, uint8_t *data, uint32_t timeout);
 
@@ -907,6 +912,8 @@ EXPORTFUNC void STDCALL QHYCCDResetFlashULVOError(qhyccd_handle *handle);
 EXPORTFUNC void STDCALL QHYCCDTestFlashULVOError(qhyccd_handle *handle);
 EXPORTFUNC void STDCALL QHYCCDSetFlashInitPWM(qhyccd_handle *handle,uint8_t pwm);
 EXPORTFUNC void STDCALL QHYCCDGetDebugDataD3(qhyccd_handle *handle, char* debugData_raw64);
+EXPORTFUNC uint32_t STDCALL QHYCCDSolve(const std::string filePath,int timeout_s, float scale_l, float  scale_h,float center_ra, float center_dec,float center_r, float& s_ra, float& s_dec,float& s_size_x,float& s_size_y, float& s_rotation);
+EXPORTFUNC void STDCALL QHYCCDEqualizeHistogram(uint8_t * pdata, int width, int height, int bpp);
 void  QHYCCDGetDebugControlID(CONTROL_ID controlId, bool hasValue, bool isSetValue, double value);
 
 
@@ -990,6 +997,9 @@ EXPORTC void STDCALL QHYCCD_fpga_reset();
 void call_pnp_event();
 void call_data_event_live(char *id, uint8_t *imgdata);
 void call_transfer_event_error();
+void call_critical_event_error(qhyccd_handle *h);
 EXPORTFUNC void RegisterPnpEventIn( void (*in_pnp_event_in_func)(char *id));
 EXPORTFUNC void RegisterPnpEventOut( void (*in_pnp_event_out_func)(char *id));
 EXPORTFUNC void RegisterTransferEventError( void (*transfer_event_error_func)());
+EXPORTFUNC uint32_t STDCALL PCIEClearDDR(qhyccd_handle *handle);
+EXPORTFUNC uint32_t STDCALL PCIEWriteCameraRegister2(qhyccd_handle *handle, unsigned char idx, unsigned char val);

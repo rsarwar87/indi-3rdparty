@@ -61,6 +61,8 @@ protected:
     virtual bool StartStreaming() override;
     virtual bool StopStreaming() override;
 
+    virtual bool SetCaptureFormat(uint8_t index) override;
+
     virtual bool UpdateCCDFrame(int x, int y, int w, int h) override;
     virtual bool UpdateCCDBin(int binx, int biny) override;
 
@@ -71,7 +73,7 @@ protected:
     virtual IPState GuideWest(uint32_t ms) override;
 
     // PlayerOne specific keywords
-    virtual void addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip) override;
+    virtual void addFITSKeywords(INDI::CCDChip *targetChip) override;
 
     // Save config
     virtual bool saveConfigItems(FILE *fp) override;

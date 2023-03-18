@@ -153,12 +153,23 @@ bool ToupBase::initProperties()
     INDI::CCD::initProperties();
 
     ///////////////////////////////////////////////////////////////////////////////////
-    /// Cooler Control
+    /// Binning Mode Control
     ///////////////////////////////////////////////////////////////////////////////////
-    IUFillSwitch(&CoolerS[0], "COOLER_ON", "ON", ISS_OFF);
-    IUFillSwitch(&CoolerS[1], "COOLER_OFF", "OFF", ISS_ON);
-    IUFillSwitchVector(&CoolerSP, CoolerS, 2, getDeviceName(), "CCD_COOLER", "Cooler", MAIN_CONTROL_TAB, IP_WO,
+    IUFillSwitch(&BinningModeS[TC_BINNING_AVG], "TC_BINNING_AVG", "AVG", ISS_OFF);
+    IUFillSwitch(&BinningModeS[TC_BINNING_ADD], "TC_BINNING_ADD", "Add", ISS_ON);
+    IUFillSwitchVector(&BinningModeSP, BinningModeS, 2, getDeviceName(), "CCD_BINNING_MODE", "Binning Mode", IMAGE_SETTINGS_TAB,
+                       IP_WO,
                        ISR_1OFMANY, 0, IPS_IDLE);
+
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    /// Cooler Control
+    /// N.B. Some cameras starts with cooling immediately if powered.
+    ///////////////////////////////////////////////////////////////////////////////////
+    IUFillSwitch(&CoolerS[0], "COOLER_ON", "ON", ISS_ON);
+    IUFillSwitch(&CoolerS[1], "COOLER_OFF", "OFF", ISS_OFF);
+    IUFillSwitchVector(&CoolerSP, CoolerS, 2, getDeviceName(), "CCD_COOLER", "Cooler", MAIN_CONTROL_TAB, IP_WO,
+                       ISR_1OFMANY, 0, IPS_BUSY);
 
     ///////////////////////////////////////////////////////////////////////////////////
     /// Controls
@@ -282,9 +293,17 @@ bool ToupBase::initProperties()
     ///////////////////////////////////////////////////////////////////////////////////
     IUFillSwitch(&LowNoiseS[INDI_ENABLED], "INDI_ENABLED", "Enabled", ISS_OFF);
     IUFillSwitch(&LowNoiseS[INDI_DISABLED], "INDI_DISABLED", "Disabled", ISS_ON);
-    IUFillSwitchVector(&LowNoiseSP, LowNoiseS, 2, getDeviceName(), "TC_LOW_NOISE_CONTROL", "Low Noise Mode", CONTROL_TAB,
+    IUFillSwitchVector(&LowNoiseSP, LowNoiseS, 2, getDeviceName(), "TC_LOW_NOISE_CONTROL", "LN Mode", CONTROL_TAB,
                        IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
+
+    ///////////////////////////////////////////////////////////////////////////////////
+    /// High Fullwell Mode
+    ///////////////////////////////////////////////////////////////////////////////////
+    IUFillSwitch(&HighFullwellModeS[INDI_ENABLED], "INDI_ENABLED", "Enabled", ISS_OFF);
+    IUFillSwitch(&HighFullwellModeS[INDI_DISABLED], "INDI_DISABLED", "Disabled", ISS_ON);
+    IUFillSwitchVector(&HighFullwellModeSP, HighFullwellModeS, 2, getDeviceName(), "TC_HIGHFULLWELL_CONTROL", "HFW Mode", CONTROL_TAB,
+                       IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
     ///////////////////////////////////////////////////////////////////////////////////
     /// Heat Control
@@ -313,10 +332,6 @@ bool ToupBase::initProperties()
     ///////////////////////////////////////////////////////////////////////////////////
     /// Video Format
     ///////////////////////////////////////////////////////////////////////////////////
-    /// RGB Mode but 8 bits grayscale
-    //IUFillSwitch(&VideoFormatS[TC_VIDEO_MONO_8], "TC_VIDEO_MONO_8", "Mono 8", ISS_OFF);
-    /// RGB Mode but 16 bits grayscale
-    //IUFillSwitch(&VideoFormatS[TC_VIDEO_MONO_16], "TC_VIDEO_MONO_16", "Mono 16", ISS_OFF);
     /// RGB Mode with RGB24 color
     IUFillSwitch(&VideoFormatS[TC_VIDEO_COLOR_RGB], "TC_VIDEO_COLOR_RGB", "RGB", ISS_OFF);
     /// Raw mode (8 to 16 bit)
@@ -329,6 +344,7 @@ bool ToupBase::initProperties()
     ///////////////////////////////////////////////////////////////////////////////////
     IUFillSwitchVector(&ResolutionSP, ResolutionS, 0, getDeviceName(), "CCD_RESOLUTION", "Resolution", CONTROL_TAB, IP_RW,
                        ISR_1OFMANY, 60, IPS_IDLE);
+    IUGetConfigOnSwitchIndex(getDeviceName(), ResolutionSP.name, &m_ConfigResolutionIndex);
 
     ///////////////////////////////////////////////////////////////////////////////////
     /// Firmware
@@ -353,18 +369,23 @@ bool ToupBase::initProperties()
 
 bool ToupBase::updateProperties()
 {
+    // Setup parameters and reset capture format.
+    if (isConnected())
+    {
+        // Clear format
+        CaptureFormatSP.resize(0);
+        m_CaptureFormats.clear();
+
+        // Get parameters from camera
+        setupParams();
+    }
+
     INDI::CCD::updateProperties();
 
     if (isConnected())
     {
-        // Let's get parameters now from CCD
-        setupParams();
-
         if (HasCooler())
-        {
             defineProperty(&CoolerSP);
-            loadConfig(true, "CCD_COOLER");
-        }
         // Even if there is no cooler, we define temperature property as READ ONLY
         else if (m_Instance->model->flag & CP(FLAG_GETTEMPERATURE))
         {
@@ -388,8 +409,13 @@ bool ToupBase::updateProperties()
         defineProperty(&VideoFormatSP);
         defineProperty(&ResolutionSP);
         defineProperty(&ADCNP);
+
+        if (m_HasHighFullwellMode)
+            defineProperty(&HighFullwellModeSP);
+
         if (m_HasLowNoise)
             defineProperty(&LowNoiseSP);
+
         if (m_HasHeatUp)
             defineProperty(&HeatUpSP);
 
@@ -399,6 +425,10 @@ bool ToupBase::updateProperties()
             defineProperty(&GainConversionNP);
             defineProperty(&GainConversionSP);
         }
+
+        // Binning mode
+        // TODO: Check if Camera supports binning mode
+        defineProperty(&BinningModeSP);
 
         // Levels
         defineProperty(&LevelRangeNP);
@@ -439,8 +469,13 @@ bool ToupBase::updateProperties()
         deleteProperty(VideoFormatSP.name);
         deleteProperty(ResolutionSP.name);
         deleteProperty(ADCNP.name);
+
         if (m_HasLowNoise)
             deleteProperty(LowNoiseSP.name);
+        
+        if (m_HasHighFullwellMode)
+            deleteProperty(HighFullwellModeSP.name);
+
         if (m_HasHeatUp)
             deleteProperty(HeatUpSP.name);
 
@@ -450,6 +485,7 @@ bool ToupBase::updateProperties()
             deleteProperty(GainConversionSP.name);
         }
 
+        deleteProperty(BinningModeSP.name);
         deleteProperty(LevelRangeNP.name);
         deleteProperty(BlackBalanceNP.name);
         deleteProperty(OffsetNP.name);
@@ -618,6 +654,8 @@ void ToupBase::setupParams()
         rc = FP(put_Option(m_CameraHandle, CP(OPTION_RAW), 1));
         LOGF_DEBUG("OPTION_RAW 1. rc: %s", errorCodes[rc].c_str());
 
+        CaptureFormat mono16 = {"INDI_MONO_16", "Mono 16", 16, false};
+        CaptureFormat mono8 = {"INDI_MONO_8", "Mono 8", 8, false};
         if (m_Instance->model->flag & RAW_SUPPORTED)
         {
             // enable bitdepth
@@ -626,17 +664,21 @@ void ToupBase::setupParams()
             m_BitsPerPixel = 16;
             VideoFormatS[TC_VIDEO_MONO_16].s = ISS_ON;
             m_CurrentVideoFormat = TC_VIDEO_MONO_16;
+            mono16.isDefault = true;
         }
         else
         {
             m_BitsPerPixel = 8;
             VideoFormatS[TC_VIDEO_MONO_8].s = ISS_ON;
             m_CurrentVideoFormat = TC_VIDEO_MONO_8;
+            mono8.isDefault = true;
         }
 
         m_CameraPixelFormat = INDI_MONO;
         m_Channels = 1;
 
+        addCaptureFormat(mono8);
+        addCaptureFormat(mono16);
         LOGF_DEBUG("Bits Per Pixel: %d Video Mode: %s", m_BitsPerPixel,
                    VideoFormatS[TC_VIDEO_MONO_8].s == ISS_ON ? "Mono 8-bit" : "Mono 16-bit");
     }
@@ -658,12 +700,16 @@ void ToupBase::setupParams()
         rc = FP(get_Option(m_CameraHandle, CP(OPTION_RAW), &cameraDataMode));
         LOGF_DEBUG("OPTION_RAW. rc: %s Value: %d", errorCodes[rc].c_str(), cameraDataMode);
 
+        CaptureFormat rgb = {"INDI_RGB", "RGB", 8};
+        CaptureFormat raw = {"INDI_RAW", m_RAWHighDepthSupport ? "RAW 16" : "RAW 8", static_cast<uint8_t>(m_RAWHighDepthSupport ? 16 : 8)};
+
         // Color RAW
         if (cameraDataMode == TC_VIDEO_COLOR_RAW)
         {
             VideoFormatS[TC_VIDEO_COLOR_RAW].s = ISS_ON;
             m_Channels = 1;
             LOG_INFO("Video Mode RAW detected.");
+            raw.isDefault = true;
 
             // Get RAW Format
             IUSaveText(&BayerT[2], getBayerString());
@@ -688,11 +734,15 @@ void ToupBase::setupParams()
             m_Channels = 3;
             m_CameraPixelFormat = INDI_RGB;
             m_BitsPerPixel = 8;
+            rgb.isDefault = true;
 
             // Disable Bayer until we switch to raw mode
             if (m_RAWFormatSupport)
                 SetCCDCapability(GetCCDCapability() & ~CCD_HAS_BAYER);
         }
+
+        addCaptureFormat(rgb);
+        addCaptureFormat(raw);
 
         LOGF_DEBUG("Bits Per Pixel: %d Video Mode: %s", m_BitsPerPixel,
                    VideoFormatS[TC_VIDEO_COLOR_RGB].s == ISS_ON ? "RGB" : "RAW");
@@ -743,18 +793,33 @@ void ToupBase::setupParams()
     }
 
     // Get active resolution index
-    uint32_t currentResolutionIndex = 0;
-    rc = FP(get_eSize(m_CameraHandle, &currentResolutionIndex));
-    ResolutionS[currentResolutionIndex].s = ISS_ON;
+    uint32_t currentResolutionIndex = 0, finalResolutionIndex = 0;
+    FP(get_eSize(m_CameraHandle, &currentResolutionIndex));
+    // If we have a config resolution index, then prefer it over the current resolution index.
+    finalResolutionIndex = (m_ConfigResolutionIndex >= 0
+                            && m_ConfigResolutionIndex < ResolutionSP.nsp) ? m_ConfigResolutionIndex : currentResolutionIndex;
+    // In case there is NO previous resolution set
+    // then select the LOWER resolution on arm architecture
+    // since this has less chance of failure. If the user explicitly selects any resolution
+    // it would be saved in the config and this will not apply.
+#if defined(__arm__) || defined (__aarch64__)
+    if (m_ConfigResolutionIndex == -1)
+        finalResolutionIndex = ResolutionSP.nsp - 1;
+#endif
+    ResolutionS[finalResolutionIndex].s = ISS_ON;
 
-    SetCCDParams(w[currentResolutionIndex], h[currentResolutionIndex], m_BitsPerPixel, m_Instance->model->xpixsz,
+    // If final resolution index different from current, let's set it.
+    if (finalResolutionIndex != currentResolutionIndex)
+        FP(put_eSize(m_CameraHandle, finalResolutionIndex));
+
+    SetCCDParams(w[finalResolutionIndex], h[finalResolutionIndex], m_BitsPerPixel, m_Instance->model->xpixsz,
                  m_Instance->model->ypixsz);
 
     m_CanSnap = m_Instance->model->still > 0;
     LOGF_DEBUG("Camera snap support: %s", m_CanSnap ? "True" : "False");
 
     // Trigger Mode
-    rc = FP(get_Option(m_CameraHandle, CP(OPTION_TRIGGER), &nVal));
+    FP(get_Option(m_CameraHandle, CP(OPTION_TRIGGER), &nVal));
     LOGF_DEBUG("Trigger mode: %d", nVal);
     m_CurrentTriggerMode = static_cast<eTriggerMode>(nVal);
 
@@ -785,7 +850,7 @@ void ToupBase::setupParams()
     GainConversionS[highConversionGain].s = ISS_ON;
 
     // Gain
-    rc = FP(get_ExpoAGainRange(m_CameraHandle, &nMin, &nMax, &nDef));
+    FP(get_ExpoAGainRange(m_CameraHandle, &nMin, &nMax, &nDef));
     LOGF_DEBUG("Exposure Auto Gain Control. Min: %u Max: %u Default: %u", nMin, nMax, nDef);
     ControlN[TC_GAIN].min = nMin;
     m_MaxGainNative = nMax;
@@ -809,6 +874,19 @@ void ToupBase::setupParams()
     GainConversionN[TC_HCG_THRESHOLD].max = m_MaxGainNative;
     GainConversionN[TC_HCG_THRESHOLD].step = (m_MaxGainNative - nMin) / 20.0;
 
+#if defined(BUILD_TOUPCAM)
+    // High FullWell Mode
+    if (m_Instance->model->flag & CP(FLAG_HIGH_FULLWELL))
+    {
+        m_HasHighFullwellMode = true;
+        LOG_INFO("High Full Well is possible");
+    }
+    else 
+    {
+        m_HasHighFullwellMode = false;
+        LOG_INFO("High Full Well is NOT possible");
+    }
+#endif
     // Low Noise
     if (m_Instance->model->flag & CP(FLAG_LOW_NOISE))
     {
@@ -944,7 +1022,7 @@ void ToupBase::setupParams()
     //    LOG_DEBUG("Starting event callback in pull mode.");
 
     // Start push callback
-    if ( (rc = FP(StartPushModeV3(m_CameraHandle, &ToupBase::pushCB, this, &ToupBase::eventCB, this)) != 0))
+    if ( (rc = FP(StartPushModeV3(m_CameraHandle, &ToupBase::pushCB, this, &ToupBase::eventCB, this))) != 0)
     {
         LOGF_ERROR("Failed to start camera push mode. %s", errorCodes[rc].c_str());
         Disconnect();
@@ -957,7 +1035,7 @@ void ToupBase::setupParams()
 
 void ToupBase::allocateFrameBuffer()
 {
-    LOG_DEBUG("Allocating Frame Buffer...");
+    //LOG_DEBUG("Allocating Frame Buffer...");
 
     // Allocate memory
     if (m_MonoCamera)
@@ -1281,6 +1359,23 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
 {
     if (dev != nullptr && !strcmp(dev, getDeviceName()))
     {
+
+        //////////////////////////////////////////////////////////////////////
+        /// Binning Mode Control
+        //////////////////////////////////////////////////////////////////////
+        if (!strcmp(name, BinningModeSP.name))
+        {
+            IUUpdateSwitch(&BinningModeSP, states, names, n);
+            auto mode = (BinningModeS[TC_BINNING_AVG].s == ISS_ON) ? TC_BINNING_AVG : TC_BINNING_ADD;
+            m_BinningMode = mode;
+            updateBinningMode(PrimaryCCD.getBinX(), mode);
+            LOGF_DEBUG("Set Binning Mode %s", mode == TC_BINNING_AVG ? "AVG" : "ADD");
+            saveConfig(true, BinningModeSP.name);
+            return true;
+        }
+
+
+
         //////////////////////////////////////////////////////////////////////
         /// Cooler Control
         //////////////////////////////////////////////////////////////////////
@@ -1293,11 +1388,8 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
                 return true;
             }
 
-            if (CoolerS[TC_COOLER_ON].s == ISS_ON)
-                activateCooler(true);
-            else
-                activateCooler(false);
-
+            activateCooler(CoolerS[TC_COOLER_ON].s == ISS_ON);
+            saveConfig(true, CoolerSP.name);
             return true;
         }
 
@@ -1311,8 +1403,63 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
             IDSetSwitch(&FanSpeedSP, nullptr);
             return true;
         }
+#if defined(BUILD_TOUPCAM)
 
-#if defined(BUILD_TOUPCAM) || defined(BUILD_ALTAIRCAM) || defined(BUILD_STARSHOOTG)
+       //////////////////////////////////////////////////////////////////////
+        /// High Fullwell Mode
+        //////////////////////////////////////////////////////////////////////
+        if (!strcmp(name, HighFullwellModeSP.name))
+        {
+            int prevIndex = IUFindOnSwitchIndex(&HighFullwellModeSP);
+            IUUpdateSwitch(&HighFullwellModeSP, states, names, n);
+
+            if (HighFullwellModeS[TC_HIGHFULLWELL_ON].s == ISS_ON)
+            {
+
+                HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_HIGH_FULLWELL), 1));
+                if (FAILED(rc))
+                {
+                    LOGF_ERROR("Failed to set High Full Well Mode %s. Error (%s)", HighFullwellModeS[INDI_ENABLED].s == ISS_ON ? "on" : "off",
+                            errorCodes[rc].c_str());
+                    HighFullwellModeSP.s = IPS_ALERT;
+                    IUResetSwitch(&HighFullwellModeSP);
+                    HighFullwellModeS[prevIndex].s = ISS_ON;
+                }
+                else
+                {
+                    LOG_INFO("Set High Full Well Mode to ON");
+                    HighFullwellModeSP.s = IPS_OK;
+                }
+
+                IDSetSwitch(&HighFullwellModeSP, nullptr);
+            }
+            else
+            {
+                HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_HIGH_FULLWELL), 0));
+                if (FAILED(rc))
+                {
+                    LOGF_ERROR("Failed to set high Full Well Mode %s. Error (%s)", HighFullwellModeS[INDI_ENABLED].s == ISS_ON ? "on" : "off",
+                            errorCodes[rc].c_str());
+                    HighFullwellModeSP.s = IPS_ALERT;
+                    IUResetSwitch(&HighFullwellModeSP);
+                    HighFullwellModeS[prevIndex].s = ISS_ON;
+                }
+                else
+                {
+                    LOG_INFO("Set High Full Well Mode to OFF");
+                    HighFullwellModeSP.s = IPS_OK;
+                }
+
+                IDSetSwitch(&HighFullwellModeSP, nullptr);
+                
+            }
+            return true;
+        }
+
+        
+#endif
+
+#if defined(BUILD_TOUPCAM) || defined(BUILD_ALTAIRCAM) || defined(BUILD_STARSHOOTG)    
         //////////////////////////////////////////////////////////////////////
         /// Low Noise
         //////////////////////////////////////////////////////////////////////
@@ -1409,8 +1556,6 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
         //////////////////////////////////////////////////////////////////////
         if (!strcmp(name, VideoFormatSP.name))
         {
-            int rc = 0;
-
             if (Streamer->isBusy())
             {
                 VideoFormatSP.s = IPS_ALERT;
@@ -1419,156 +1564,9 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
                 return true;
             }
 
-            int prevIndex = IUFindOnSwitchIndex(&VideoFormatSP);
             IUUpdateSwitch(&VideoFormatSP, states, names, n);
             int currentIndex = IUFindOnSwitchIndex(&VideoFormatSP);
-
-            m_Channels = 1;
-            m_BitsPerPixel = 8;
-
-            // Mono
-            if (m_MonoCamera)
-            {
-                if (m_MaxBitDepth == 8 && currentIndex == TC_VIDEO_MONO_16)
-                {
-                    VideoFormatSP.s = IPS_ALERT;
-                    LOG_ERROR("Only 8-bit format is supported.");
-                    IUResetSwitch(&VideoFormatSP);
-                    VideoFormatS[prevIndex].s = ISS_ON;
-                    IDSetSwitch(&VideoFormatSP, nullptr);
-                    return true;
-                }
-
-                // We need to stop camera first
-                LOG_DEBUG("Stopping camera to change video mode.");
-                FP(Stop(m_CameraHandle));
-
-                //                int rc = FP(put_Option(m_CameraHandle, CP(OPTION_RGB), currentIndex+3)));
-                //                if (rc != 0)
-                //                {
-                //                    LOGF_ERROR("Failed to set RGB mode %d: %s", currentIndex+3, errorCodes[rc].c_str());
-                //                    VideoFormatSP.s = IPS_ALERT;
-                //                    IUResetSwitch(&VideoFormatSP);
-                //                    VideoFormatS[prevIndex].s = ISS_ON;
-                //                    IDSetSwitch(&VideoFormatSP, nullptr);
-
-                //                    // Restart Capture
-                //                    FP(StartPullModeWithCallback(m_CameraHandle, &TOUPCAM::eventCB, this));
-                //                    LOG_DEBUG("Restarting event callback after video mode change failed.");
-
-                //                    return true;
-                //                }
-                //                else
-                //                    LOGF_DEBUG("Set CP(OPTION_RGB --> %d"), currentIndex+3));
-
-                rc = FP(put_Option(m_CameraHandle, CP(OPTION_BITDEPTH), currentIndex));
-                if (FAILED(rc))
-                {
-                    LOGF_ERROR("Failed to set high bit depth mode %s", errorCodes[rc].c_str());
-                    VideoFormatSP.s = IPS_ALERT;
-                    IUResetSwitch(&VideoFormatSP);
-                    VideoFormatS[prevIndex].s = ISS_ON;
-                    IDSetSwitch(&VideoFormatSP, nullptr);
-
-                    // Restart Capture
-                    FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
-                    LOG_DEBUG("Restarting event callback after video mode change failed.");
-
-                    return true;
-                }
-                else
-                    LOGF_DEBUG("Set OPTION_BITDEPTH --> %d", currentIndex);
-
-                m_BitsPerPixel = (currentIndex == TC_VIDEO_MONO_8) ? 8 : 16;
-            }
-            // Color
-            else
-            {
-                // Check if raw format is supported.
-                if (currentIndex == TC_VIDEO_COLOR_RAW && m_RAWFormatSupport == false)
-                {
-                    VideoFormatSP.s = IPS_ALERT;
-                    IUResetSwitch(&VideoFormatSP);
-                    VideoFormatS[prevIndex].s = ISS_ON;
-                    LOG_ERROR("RAW format is not supported.");
-                    IDSetSwitch(&VideoFormatSP, nullptr);
-                    return true;
-                }
-
-                // We need to stop camera first
-                LOG_DEBUG("Stopping camera to change video mode.");
-                FP(Stop(m_CameraHandle));
-
-                rc = FP(put_Option(m_CameraHandle, CP(OPTION_RAW), currentIndex));
-                if (FAILED(rc))
-                {
-                    LOGF_ERROR("Failed to set video mode: %s", errorCodes[rc].c_str());
-                    VideoFormatSP.s = IPS_ALERT;
-                    IUResetSwitch(&VideoFormatSP);
-                    VideoFormatS[prevIndex].s = ISS_ON;
-                    IDSetSwitch(&VideoFormatSP, nullptr);
-
-                    // Restart Capture
-                    FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
-                    LOG_DEBUG("Restarting event callback after changing video mode failed.");
-
-                    return true;
-                }
-                else
-                    LOGF_DEBUG("Set OPTION_RAW --> %d", currentIndex);
-
-                if (currentIndex == TC_VIDEO_COLOR_RGB)
-                {
-                    m_Channels = 3;
-                    m_BitsPerPixel = 8;
-                    // Disable Bayer if supported.
-                    if (m_RAWFormatSupport)
-                        SetCCDCapability(GetCCDCapability() & ~CCD_HAS_BAYER);
-                }
-                else
-                {
-                    SetCCDCapability(GetCCDCapability() | CCD_HAS_BAYER);
-                    IUSaveText(&BayerT[2], getBayerString());
-                    IDSetText(&BayerTP, nullptr);
-                    m_BitsPerPixel = m_RawBitsPerPixel;
-                }
-
-                //                if (currentIndex == TC_VIDEO_COLOR_RGB)
-                //                {
-                //                    int rc = FP(put_Option(m_CameraHandle, CP(OPTION_RGB), 0)));
-                //                    if (rc != 0)
-                //                    {
-                //                        LOGF_ERROR("Failed to set RGB mode %d: %s", currentIndex+3, errorCodes[rc].c_str());
-                //                        VideoFormatSP.s = IPS_ALERT;
-                //                        IUResetSwitch(&VideoFormatSP);
-                //                        VideoFormatS[prevIndex].s = ISS_ON;
-                //                        IDSetSwitch(&VideoFormatSP, nullptr);
-
-                //                        // Restart Capture
-                //                        FP(StartPullModeWithCallback(m_CameraHandle, &TOUPCAM::eventCB, this));
-                //                        LOG_DEBUG("Restarting event callback after video mode change failed.");
-
-                //                        return true;
-                //                    }
-                //                }
-
-            }
-
-            m_CurrentVideoFormat = currentIndex;
-            m_BitsPerPixel = (m_BitsPerPixel > 8) ? 16 : 8;
-
-            LOGF_DEBUG("Video Format: %d m_BitsPerPixel: %d", currentIndex, m_BitsPerPixel);
-
-            // Allocate memory
-            allocateFrameBuffer();
-
-            VideoFormatSP.s = IPS_OK;
-            IDSetSwitch(&VideoFormatSP, nullptr);
-
-            // Restart Capture
-            FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
-            LOG_DEBUG("Restarting event callback after video mode change.");
-
+            setVideoFormat(currentIndex);
             return true;
         }
 
@@ -1669,12 +1667,18 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
 
             int preIndex = IUFindOnSwitchIndex(&ResolutionSP);
             IUUpdateSwitch(&ResolutionSP, states, names, n);
+            int targetIndex = IUFindOnSwitchIndex(&ResolutionSP);
+
+            if (m_ConfigResolutionIndex == targetIndex)
+            {
+                ResolutionSP.s = IPS_OK;
+                IDSetSwitch(&ResolutionSP, nullptr);
+                return true;
+            }
 
             // Stop capture
             LOG_DEBUG("Stopping camera to change resolution.");
             FP(Stop(m_CameraHandle));
-
-            int targetIndex = IUFindOnSwitchIndex(&ResolutionSP);
 
             HRESULT rc = FP(put_eSize(m_CameraHandle, targetIndex));
             if (FAILED(rc))
@@ -1690,6 +1694,8 @@ bool ToupBase::ISNewSwitch(const char *dev, const char *name, ISState * states, 
                 PrimaryCCD.setResolution(m_Instance->model->res[targetIndex].width, m_Instance->model->res[targetIndex].height);
                 LOGF_INFO("Resolution changed to %s", ResolutionS[targetIndex].label);
                 allocateFrameBuffer();
+                m_ConfigResolutionIndex = targetIndex;
+                saveConfig(true, ResolutionSP.name);
             }
 
             IDSetSwitch(&ResolutionSP, nullptr);
@@ -2070,6 +2076,9 @@ bool ToupBase::UpdateCCDFrame(int x, int y, int w, int h)
     // Set UNBINNED coords
     PrimaryCCD.setFrame(x, y, w, h);
 
+    // As proposed by Max in INDI forum, increase download estimation after changing ROI since next
+    // frame may take longer to download.
+    m_DownloadEstimation = 10000;
 
     // Total bytes required for image buffer
     uint32_t nbuf = (w * h * PrimaryCCD.getBPP() / 8) * m_Channels;
@@ -2081,6 +2090,37 @@ bool ToupBase::UpdateCCDFrame(int x, int y, int w, int h)
     return true;
 }
 
+bool ToupBase::updateBinningMode(int binx, int mode)
+{
+    int binningMode = binx;
+
+    if ((mode == TC_BINNING_AVG) && (binx > 1))
+    {
+        binningMode = binx | 0x80;
+    }
+    LOGF_DEBUG("binningMode code to set: 0x%x", binningMode);
+
+    HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_BINNING), binningMode));
+    if (FAILED(rc))
+    {
+        LOGF_ERROR("Binning %dx%d with Option 0x%x is not support. %s", binx, binx, binningMode, errorCodes[rc].c_str());
+        BinningModeSP.s = IPS_ALERT;
+        IDSetSwitch(&BinningModeSP, nullptr);
+        return false;
+    }
+    else
+    {
+        BinningModeSP.s = IPS_OK;
+        IDSetSwitch(&BinningModeSP, nullptr);
+    }
+
+    PrimaryCCD.setBin(binx, binx);
+
+
+    return UpdateCCDFrame(PrimaryCCD.getSubX(), PrimaryCCD.getSubY(), PrimaryCCD.getSubW(), PrimaryCCD.getSubH());;
+
+}
+
 bool ToupBase::UpdateCCDBin(int binx, int biny)
 {
     //    if (binx > 4)
@@ -2088,17 +2128,13 @@ bool ToupBase::UpdateCCDBin(int binx, int biny)
     //        LOG_ERROR("Only 1x1, 2x2, 3x3, and 4x4 modes are supported.");
     //        return false;
     //    }
-
-    // TODO add option to select between additive vs. average binning
-    HRESULT rc = FP(put_Option(m_CameraHandle, CP(OPTION_BINNING), binx));
-    if (FAILED(rc))
+    if (binx != biny)
     {
-        LOGF_ERROR("Binning %dx%d is not support. %s", binx, biny, errorCodes[rc].c_str());
+        LOG_ERROR("Binning dimensions must be equal");
         return false;
     }
-    PrimaryCCD.setBin(binx, binx);
 
-    return UpdateCCDFrame(PrimaryCCD.getSubX(), PrimaryCCD.getSubY(), PrimaryCCD.getSubW(), PrimaryCCD.getSubH());
+    return updateBinningMode(binx, m_BinningMode);
 }
 
 // The generic timer call back is used for temperature monitoring
@@ -2117,8 +2153,7 @@ void ToupBase::TimerHit()
             timeleft = 0;
         PrimaryCCD.setExposureLeft(timeleft);
     }
-
-    if (m_Instance->model->flag & CP(FLAG_GETTEMPERATURE))
+    else if (m_Instance->model->flag & CP(FLAG_GETTEMPERATURE))
     {
         double currentTemperature = TemperatureN[0].value;
         int16_t nTemperature = 0;
@@ -2333,16 +2368,16 @@ void ToupBase::refreshControls()
     IDSetNumber(&ControlNP, nullptr);
 }
 
-void ToupBase::addFITSKeywords(fitsfile * fptr, INDI::CCDChip * targetChip)
+void ToupBase::addFITSKeywords(INDI::CCDChip * targetChip)
 {
-    INDI::CCD::addFITSKeywords(fptr, targetChip);
+    INDI::CCD::addFITSKeywords(targetChip);
 
     INumber *gainNP = IUFindNumber(&ControlNP, ControlN[TC_GAIN].name);
 
     if (gainNP)
     {
         int status = 0;
-        fits_update_key_s(fptr, TDOUBLE, "Gain", &(gainNP->value), "Gain", &status);
+        fits_update_key_s(*targetChip->fitsFilePointer(), TDOUBLE, "Gain", &(gainNP->value), "Gain", &status);
     }
 }
 
@@ -2362,8 +2397,15 @@ bool ToupBase::saveConfigItems(FILE * fp)
         IUSaveConfigSwitch(fp, &WBAutoSP);
 
     IUSaveConfigSwitch(fp, &VideoFormatSP);
+    IUSaveConfigSwitch(fp, &ResolutionSP);
+    IUSaveConfigSwitch(fp, &BinningModeSP);
+
     if (m_HasLowNoise)
         IUSaveConfigSwitch(fp, &LowNoiseSP);
+
+    if (m_HasHighFullwellMode)
+        IUSaveConfigSwitch(fp, &HighFullwellModeSP);        
+    
     return true;
 }
 
@@ -2440,6 +2482,12 @@ void ToupBase::pushCallback(const void* pData, const XP(FrameInfoV2)* pInfo, int
         m_DownloadEstimation = diff.tv_sec * 1000 + diff.tv_usec / 1e3;
         LOGF_DEBUG("New download estimate %.f ms", m_DownloadEstimation);
 
+        if (m_DownloadEstimation < MIN_DOWNLOAD_ESTIMATION)
+        {
+            m_DownloadEstimation = MIN_DOWNLOAD_ESTIMATION;
+            LOGF_DEBUG("Too low download estimate. Bumping to %.f ms", m_DownloadEstimation);
+        }
+
         InExposure  = false;
         PrimaryCCD.setExposureLeft(0);
         uint8_t *buffer = PrimaryCCD.getFrameBuffer();
@@ -2472,10 +2520,10 @@ void ToupBase::pushCallback(const void* pData, const XP(FrameInfoV2)* pInfo, int
                 uint8_t *subR = image;
                 uint8_t *subG = image + width * height;
                 uint8_t *subB = image + width * height * 2;
-                int size      = width * height * 3 - 3;
+                int totalSize = width * height * 3 - 3;
 
                 // RGB to three sepearate R-frame, G-frame, and B-frame for color FITS
-                for (int i = 0; i <= size; i += 3)
+                for (int i = 0; i <= totalSize; i += 3)
                 {
                     *subR++ = buffer[i];
                     *subG++ = buffer[i + 1];
@@ -2506,191 +2554,197 @@ void ToupBase::eventPullCallBack(unsigned event)
     LOGF_DEBUG("Event %#04X", event);
     switch (event)
     {
-        case CP(EVENT_EXPOSURE: )
-                m_CaptureTimeoutCounter = 0;
+        case CP(EVENT_EXPOSURE):
+            m_CaptureTimeoutCounter = 0;
             m_CaptureTimeout.stop();
             break;
-        case CP(EVENT_TEMPTINT: )
-                break;
-        case CP(EVENT_IMAGE: )
+        case CP(EVENT_TEMPTINT):
+            break;
+        case CP(EVENT_IMAGE):
+        {
+            m_CaptureTimeoutCounter = 0;
+            m_CaptureTimeout.stop();
+
+            // Estimate download time
+            struct timeval curtime, diff;
+            gettimeofday(&curtime, nullptr);
+            timersub(&curtime, &ExposureEnd, &diff);
+            m_DownloadEstimation = diff.tv_sec * 1000 + diff.tv_usec / 1e3;
+
+            if (m_DownloadEstimation < MIN_DOWNLOAD_ESTIMATION)
             {
-                m_CaptureTimeoutCounter = 0;
-                m_CaptureTimeout.stop();
+                m_DownloadEstimation = MIN_DOWNLOAD_ESTIMATION;
+                LOGF_DEBUG("Too low download estimate. Bumping to %.f ms", m_DownloadEstimation);
+            }
 
-                // Estimate download time
-                struct timeval curtime, diff;
-                gettimeofday(&curtime, nullptr);
-                timersub(&curtime, &ExposureEnd, &diff);
-                m_DownloadEstimation = diff.tv_sec * 1000 + diff.tv_usec / 1e3;
+            m_TimeoutRetries = 0;
+            XP(FrameInfoV2) info;
+            memset(&info, 0, sizeof(XP(FrameInfoV2)));
 
-                m_TimeoutRetries = 0;
-                XP(FrameInfoV2) info;
-                memset(&info, 0, sizeof(XP(FrameInfoV2)));
+            int captureBits = m_BitsPerPixel == 8 ? 8 : m_MaxBitDepth;
 
-                int captureBits = m_BitsPerPixel == 8 ? 8 : m_MaxBitDepth;
+            if (Streamer->isStreaming() || Streamer->isRecording())
+            {
+                std::unique_lock<std::mutex> guard(ccdBufferLock);
+                HRESULT rc = FP(PullImageV2(m_CameraHandle, PrimaryCCD.getFrameBuffer(), captureBits * m_Channels, &info));
+                guard.unlock();
+                if (SUCCEEDED(rc))
+                    Streamer->newFrame(PrimaryCCD.getFrameBuffer(), PrimaryCCD.getFrameBufferSize());
+            }
+            else if (InExposure)
+            {
+                InExposure = false;
+                PrimaryCCD.setExposureLeft(0);
+                uint8_t *buffer = PrimaryCCD.getFrameBuffer();
 
-                if (Streamer->isStreaming() || Streamer->isRecording())
+                if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
+                    buffer = static_cast<uint8_t*>(malloc(PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * 3));
+
+                std::unique_lock<std::mutex> guard(ccdBufferLock);
+                HRESULT rc = FP(PullImageV2(m_CameraHandle, buffer, captureBits * m_Channels, &info));
+                guard.unlock();
+                if (FAILED(rc))
                 {
-                    std::unique_lock<std::mutex> guard(ccdBufferLock);
-                    HRESULT rc = FP(PullImageV2(m_CameraHandle, PrimaryCCD.getFrameBuffer(), captureBits * m_Channels, &info));
-                    guard.unlock();
-                    if (SUCCEEDED(rc))
-                        Streamer->newFrame(PrimaryCCD.getFrameBuffer(), PrimaryCCD.getFrameBufferSize());
-                }
-                else if (InExposure)
-                {
-                    InExposure = false;
-                    PrimaryCCD.setExposureLeft(0);
-                    uint8_t *buffer = PrimaryCCD.getFrameBuffer();
-
+                    LOGF_ERROR("Failed to pull image. %s", errorCodes[rc].c_str());
+                    PrimaryCCD.setExposureFailed();
                     if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
-                        buffer = static_cast<uint8_t*>(malloc(PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * 3));
-
-                    std::unique_lock<std::mutex> guard(ccdBufferLock);
-                    HRESULT rc = FP(PullImageV2(m_CameraHandle, buffer, captureBits * m_Channels, &info));
-                    guard.unlock();
-                    if (FAILED(rc))
-                    {
-                        LOGF_ERROR("Failed to pull image. %s", errorCodes[rc].c_str());
-                        PrimaryCCD.setExposureFailed();
-                        if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
-                            free(buffer);
-                    }
-                    else
-                    {
-                        if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
-                        {
-                            std::unique_lock<std::mutex> guard(ccdBufferLock);
-                            uint8_t *image  = PrimaryCCD.getFrameBuffer();
-                            uint32_t width  = PrimaryCCD.getSubW() / PrimaryCCD.getBinX() * (PrimaryCCD.getBPP() / 8);
-                            uint32_t height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY() * (PrimaryCCD.getBPP() / 8);
-
-                            uint8_t *subR = image;
-                            uint8_t *subG = image + width * height;
-                            uint8_t *subB = image + width * height * 2;
-                            int size      = width * height * 3 - 3;
-
-                            // RGB to three sepearate R-frame, G-frame, and B-frame for color FITS
-                            for (int i = 0; i <= size; i += 3)
-                            {
-                                *subR++ = buffer[i];
-                                *subG++ = buffer[i + 1];
-                                *subB++ = buffer[i + 2];
-                            }
-
-                            guard.unlock();
-                            free(buffer);
-                        }
-
-                        LOGF_DEBUG("Image received. Width: %d Height: %d flag: %d timestamp: %ld", info.width, info.height, info.flag,
-                                   info.timestamp);
-                        ExposureComplete(&PrimaryCCD);
-                    }
+                        free(buffer);
                 }
                 else
                 {
-                    // Fix proposed by Seven Watt
-                    // Check https://github.com/indilib/indi-3rdparty/issues/112
-                    //
-                    // Starshootg_Flush is deprecated but there are no alternativess
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-                    HRESULT rc = FP(Flush(m_CameraHandle));
-#pragma GCC diagnostic pop
-                    LOG_DEBUG("Image event received after CCD is stopped. Image flushed");
-                    if (FAILED(rc))
-                    {
-                        LOGF_ERROR("Failed to flush image. %s", errorCodes[rc].c_str());
-                    }
-                }
-            }
-            break;
-        case CP(EVENT_STILLIMAGE: )
-            {
-                m_CaptureTimeoutCounter = 0;
-                m_CaptureTimeout.stop();
-                m_TimeoutRetries = 0;
-                XP(FrameInfoV2) info;
-                memset(&info, 0, sizeof(XP(FrameInfoV2)));
-
-                int captureBits = m_BitsPerPixel == 8 ? 8 : m_MaxBitDepth;
-
-                if (Streamer->isStreaming() || Streamer->isRecording())
-                {
-                    std::unique_lock<std::mutex> guard(ccdBufferLock);
-                    HRESULT rc = FP(PullStillImageV2(m_CameraHandle, PrimaryCCD.getFrameBuffer(), captureBits * m_Channels, &info));
-                    guard.unlock();
-                    if (SUCCEEDED(rc))
-                        Streamer->newFrame(PrimaryCCD.getFrameBuffer(), PrimaryCCD.getFrameBufferSize());
-                }
-                else if (InExposure)
-                {
-                    InExposure = false;
-                    PrimaryCCD.setExposureLeft(0);
-                    uint8_t *buffer = PrimaryCCD.getFrameBuffer();
-
                     if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
-                        buffer = static_cast<uint8_t*>(malloc(PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * 3));
+                    {
+                        std::unique_lock<std::mutex> locker(ccdBufferLock);
+                        uint8_t *image  = PrimaryCCD.getFrameBuffer();
+                        uint32_t width  = PrimaryCCD.getSubW() / PrimaryCCD.getBinX() * (PrimaryCCD.getBPP() / 8);
+                        uint32_t height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY() * (PrimaryCCD.getBPP() / 8);
 
-                    std::unique_lock<std::mutex> guard(ccdBufferLock);
-                    HRESULT rc = FP(PullStillImageV2(m_CameraHandle, buffer, captureBits * m_Channels, &info));
-                    guard.unlock();
-                    if (FAILED(rc))
-                    {
-                        LOGF_ERROR("Failed to pull image. %s", errorCodes[rc].c_str());
-                        PrimaryCCD.setExposureFailed();
-                        if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
-                            free(buffer);
-                    }
-                    else
-                    {
-                        if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
+                        uint8_t *subR = image;
+                        uint8_t *subG = image + width * height;
+                        uint8_t *subB = image + width * height * 2;
+                        int size      = width * height * 3 - 3;
+
+                        // RGB to three sepearate R-frame, G-frame, and B-frame for color FITS
+                        for (int i = 0; i <= size; i += 3)
                         {
-                            std::unique_lock<std::mutex> guard(ccdBufferLock);
-                            uint8_t *image  = PrimaryCCD.getFrameBuffer();
-                            uint32_t width  = PrimaryCCD.getSubW() / PrimaryCCD.getBinX() * (PrimaryCCD.getBPP() / 8);
-                            uint32_t height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY() * (PrimaryCCD.getBPP() / 8);
-
-                            uint8_t *subR = image;
-                            uint8_t *subG = image + width * height;
-                            uint8_t *subB = image + width * height * 2;
-                            int size      = width * height * 3 - 3;
-
-                            // RGB to three sepearate R-frame, G-frame, and B-frame for color FITS
-                            for (int i = 0; i <= size; i += 3)
-                            {
-                                *subR++ = buffer[i];
-                                *subG++ = buffer[i + 1];
-                                *subB++ = buffer[i + 2];
-                            }
-
-                            guard.unlock();
-                            free(buffer);
+                            *subR++ = buffer[i];
+                            *subG++ = buffer[i + 1];
+                            *subB++ = buffer[i + 2];
                         }
 
-                        LOGF_DEBUG("Image received. Width: %d Height: %d flag: %d timestamp: %ld", info.width, info.height, info.flag,
-                                   info.timestamp);
-                        ExposureComplete(&PrimaryCCD);
+                        locker.unlock();
+                        free(buffer);
                     }
+
+                    LOGF_DEBUG("Image received. Width: %d Height: %d flag: %d timestamp: %ld", info.width, info.height, info.flag,
+                               info.timestamp);
+                    ExposureComplete(&PrimaryCCD);
+                }
+            }
+            else
+            {
+                // Fix proposed by Seven Watt
+                // Check https://github.com/indilib/indi-3rdparty/issues/112
+                //
+                // Starshootg_Flush is deprecated but there are no alternativess
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+                HRESULT rc = FP(Flush(m_CameraHandle));
+#pragma GCC diagnostic pop
+                LOG_DEBUG("Image event received after CCD is stopped. Image flushed");
+                if (FAILED(rc))
+                {
+                    LOGF_ERROR("Failed to flush image. %s", errorCodes[rc].c_str());
+                }
+            }
+        }
+        break;
+        case CP(EVENT_STILLIMAGE):
+        {
+            m_CaptureTimeoutCounter = 0;
+            m_CaptureTimeout.stop();
+            m_TimeoutRetries = 0;
+            XP(FrameInfoV2) info;
+            memset(&info, 0, sizeof(XP(FrameInfoV2)));
+
+            int captureBits = m_BitsPerPixel == 8 ? 8 : m_MaxBitDepth;
+
+            if (Streamer->isStreaming() || Streamer->isRecording())
+            {
+                std::unique_lock<std::mutex> guard(ccdBufferLock);
+                HRESULT rc = FP(PullStillImageV2(m_CameraHandle, PrimaryCCD.getFrameBuffer(), captureBits * m_Channels, &info));
+                guard.unlock();
+                if (SUCCEEDED(rc))
+                    Streamer->newFrame(PrimaryCCD.getFrameBuffer(), PrimaryCCD.getFrameBufferSize());
+            }
+            else if (InExposure)
+            {
+                InExposure = false;
+                PrimaryCCD.setExposureLeft(0);
+                uint8_t *buffer = PrimaryCCD.getFrameBuffer();
+
+                if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
+                    buffer = static_cast<uint8_t*>(malloc(PrimaryCCD.getXRes() * PrimaryCCD.getYRes() * 3));
+
+                std::unique_lock<std::mutex> guard(ccdBufferLock);
+                HRESULT rc = FP(PullStillImageV2(m_CameraHandle, buffer, captureBits * m_Channels, &info));
+                guard.unlock();
+                if (FAILED(rc))
+                {
+                    LOGF_ERROR("Failed to pull image. %s", errorCodes[rc].c_str());
+                    PrimaryCCD.setExposureFailed();
+                    if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
+                        free(buffer);
                 }
                 else
                 {
-                    // Fix proposed by Seven Watt
-                    // Check https://github.com/indilib/indi-3rdparty/issues/112
-                    //
-                    // Starshootg_Flush is deprecated but there are no alternativess
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-                    HRESULT rc = FP(Flush(m_CameraHandle));
-#pragma GCC diagnostic pop
-                    LOG_DEBUG("Image event received after CCD is stopped. Image flushed");
-                    if (FAILED(rc))
+                    if (m_MonoCamera == false && m_CurrentVideoFormat == TC_VIDEO_COLOR_RGB)
                     {
-                        LOGF_ERROR("Failed to flush image. %s", errorCodes[rc].c_str());
+                        std::unique_lock<std::mutex> locker(ccdBufferLock);
+                        uint8_t *image  = PrimaryCCD.getFrameBuffer();
+                        uint32_t width  = PrimaryCCD.getSubW() / PrimaryCCD.getBinX() * (PrimaryCCD.getBPP() / 8);
+                        uint32_t height = PrimaryCCD.getSubH() / PrimaryCCD.getBinY() * (PrimaryCCD.getBPP() / 8);
+
+                        uint8_t *subR = image;
+                        uint8_t *subG = image + width * height;
+                        uint8_t *subB = image + width * height * 2;
+                        int size      = width * height * 3 - 3;
+
+                        // RGB to three sepearate R-frame, G-frame, and B-frame for color FITS
+                        for (int i = 0; i <= size; i += 3)
+                        {
+                            *subR++ = buffer[i];
+                            *subG++ = buffer[i + 1];
+                            *subB++ = buffer[i + 2];
+                        }
+
+                        locker.unlock();
+                        free(buffer);
                     }
+
+                    LOGF_DEBUG("Image received. Width: %d Height: %d flag: %d timestamp: %ld", info.width, info.height, info.flag,
+                               info.timestamp);
+                    ExposureComplete(&PrimaryCCD);
                 }
             }
-            break;
+            else
+            {
+                // Fix proposed by Seven Watt
+                // Check https://github.com/indilib/indi-3rdparty/issues/112
+                //
+                // Starshootg_Flush is deprecated but there are no alternativess
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+                HRESULT rc = FP(Flush(m_CameraHandle));
+#pragma GCC diagnostic pop
+                LOG_DEBUG("Image event received after CCD is stopped. Image flushed");
+                if (FAILED(rc))
+                {
+                    LOGF_ERROR("Failed to flush image. %s", errorCodes[rc].c_str());
+                }
+            }
+        }
+        break;
             //    {
             //                XP(FrameInfoV2) info;
             //                memset(&info, 0, sizeof(XP(FrameInfoV2)));
@@ -2711,31 +2765,153 @@ void ToupBase::eventPullCallBack(unsigned event)
             //                               info.timestamp);
             //                }
             //            }
+        break;
+        case CP(EVENT_WBGAIN):
+            LOG_DEBUG("White Balance Gain changed.");
             break;
-        case CP(EVENT_WBGAIN: )
-                LOG_DEBUG("White Balance Gain changed.");
+        case CP(EVENT_TRIGGERFAIL):
             break;
-        case CP(EVENT_TRIGGERFAIL: )
-                break;
-        case CP(EVENT_BLACK: )
-                LOG_DEBUG("Black Balance Gain changed.");
+        case CP(EVENT_BLACK):
+            LOG_DEBUG("Black Balance Gain changed.");
             break;
-        case CP(EVENT_FFC: )
-                break;
-        case CP(EVENT_DFC: )
-                break;
-        case CP(EVENT_ERROR: )
-                break;
-        case CP(EVENT_DISCONNECTED: )
-                LOG_DEBUG("Camera disconnected.");
+        case CP(EVENT_FFC):
             break;
-        case CP(EVENT_NOFRAMETIMEOUT: )
-                LOG_DEBUG("Camera timed out.");
+        case CP(EVENT_DFC):
+            break;
+        case CP(EVENT_ERROR):
+            break;
+        case CP(EVENT_DISCONNECTED):
+            LOG_DEBUG("Camera disconnected.");
+            break;
+        case CP(EVENT_NOFRAMETIMEOUT):
+            LOG_DEBUG("Camera timed out.");
             PrimaryCCD.setExposureFailed();
             break;
-        case CP(EVENT_FACTORY: )
-                break;
+        case CP(EVENT_FACTORY):
+            break;
         default:
             break;
     }
+}
+
+bool ToupBase::setVideoFormat(uint8_t index)
+{
+    if (index == IUFindOnSwitchIndex(&VideoFormatSP))
+        return true;
+
+    m_Channels = 1;
+    m_BitsPerPixel = 8;
+    // Mono
+    if (m_MonoCamera)
+    {
+        if (m_MaxBitDepth == 8 && index == TC_VIDEO_MONO_16)
+        {
+            VideoFormatSP.s = IPS_ALERT;
+            LOG_ERROR("Only 8-bit format is supported.");
+            IUResetSwitch(&VideoFormatSP);
+            VideoFormatS[TC_VIDEO_MONO_8].s = ISS_ON;
+            IDSetSwitch(&VideoFormatSP, nullptr);
+            return false;
+        }
+
+        // We need to stop camera first
+        LOG_DEBUG("Stopping camera to change video mode.");
+        FP(Stop(m_CameraHandle));
+
+        int rc = FP(put_Option(m_CameraHandle, CP(OPTION_BITDEPTH), index));
+        if (FAILED(rc))
+        {
+            LOGF_ERROR("Failed to set high bit depth mode %s", errorCodes[rc].c_str());
+            VideoFormatSP.s = IPS_ALERT;
+            IUResetSwitch(&VideoFormatSP);
+            VideoFormatS[TC_VIDEO_MONO_8].s = ISS_ON;
+            IDSetSwitch(&VideoFormatSP, nullptr);
+
+            // Restart Capture
+            FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
+            LOG_DEBUG("Restarting event callback after video mode change failed.");
+
+            return false;
+        }
+        else
+            LOGF_DEBUG("Set OPTION_BITDEPTH --> %d", index);
+
+        m_BitsPerPixel = (index == TC_VIDEO_MONO_8) ? 8 : 16;
+    }
+    // Color
+    else
+    {
+        // Check if raw format is supported.
+        if (index == TC_VIDEO_COLOR_RAW && m_RAWFormatSupport == false)
+        {
+            VideoFormatSP.s = IPS_ALERT;
+            IUResetSwitch(&VideoFormatSP);
+            VideoFormatS[TC_VIDEO_COLOR_RGB].s = ISS_ON;
+            LOG_ERROR("RAW format is not supported.");
+            IDSetSwitch(&VideoFormatSP, nullptr);
+            return false;
+        }
+
+        // We need to stop camera first
+        LOG_DEBUG("Stopping camera to change video mode.");
+        FP(Stop(m_CameraHandle));
+
+        int rc = FP(put_Option(m_CameraHandle, CP(OPTION_RAW), index));
+        if (FAILED(rc))
+        {
+            LOGF_ERROR("Failed to set video mode: %s", errorCodes[rc].c_str());
+            VideoFormatSP.s = IPS_ALERT;
+            IUResetSwitch(&VideoFormatSP);
+            VideoFormatS[TC_VIDEO_COLOR_RGB].s = ISS_ON;
+            IDSetSwitch(&VideoFormatSP, nullptr);
+
+            // Restart Capture
+            FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
+            LOG_DEBUG("Restarting event callback after changing video mode failed.");
+            return false;
+        }
+        else
+            LOGF_DEBUG("Set OPTION_RAW --> %d", index);
+
+        if (index == TC_VIDEO_COLOR_RGB)
+        {
+            m_Channels = 3;
+            m_BitsPerPixel = 8;
+            // Disable Bayer if supported.
+            if (m_RAWFormatSupport)
+                SetCCDCapability(GetCCDCapability() & ~CCD_HAS_BAYER);
+        }
+        else
+        {
+            SetCCDCapability(GetCCDCapability() | CCD_HAS_BAYER);
+            IUSaveText(&BayerT[2], getBayerString());
+            IDSetText(&BayerTP, nullptr);
+            m_BitsPerPixel = m_RawBitsPerPixel;
+        }
+    }
+
+    m_CurrentVideoFormat = index;
+    m_BitsPerPixel = (m_BitsPerPixel > 8) ? 16 : 8;
+
+    LOGF_DEBUG("Video Format: %d m_BitsPerPixel: %d", index, m_BitsPerPixel);
+
+    // Allocate memory
+    allocateFrameBuffer();
+
+    IUResetSwitch(&VideoFormatSP);
+    VideoFormatS[index].s = ISS_ON;
+    VideoFormatSP.s = IPS_OK;
+    IDSetSwitch(&VideoFormatSP, nullptr);
+
+    // Restart Capture
+    FP(StartPullModeWithCallback(m_CameraHandle, &ToupBase::eventCB, this));
+    LOG_DEBUG("Restarting event callback after video mode change.");
+    saveConfig(true, VideoFormatSP.name);
+
+    return true;
+}
+
+bool ToupBase::SetCaptureFormat(uint8_t index)
+{
+    return setVideoFormat(index);
 }

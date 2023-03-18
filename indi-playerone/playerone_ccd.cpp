@@ -173,35 +173,7 @@ void POACCD::workerStreamVideo(const std::atomic_bool &isAbortToQuit)
     ret = POAStartExposure(mCameraInfo.cameraID, POA_FALSE);
     if (ret != POA_OK)
         LOGF_ERROR("Failed to start video capture (%s).", Helpers::toString(ret));
-    
-#ifdef ASI_LEGACY
-    while (!isAbortToQuit)
-    {
-        uint8_t *targetFrame = PrimaryCCD.getFrameBuffer();
-        uint32_t totalBytes  = PrimaryCCD.getFrameBufferSize();
-        int waitMS           = static_cast<int>((ExposureRequest / 1000.0) + 500);
 
-        ret = POAGetImageData(mCameraInfo.cameraID, targetFrame, totalBytes, waitMS);
-        if (ret != POA_OK)
-        {
-            if (ret != POA_ERROR_TIMEOUT)
-            {
-                Streamer->setStream(false);
-                LOGF_ERROR("Failed to read video data (%s).", Helpers::toString(ret));
-                break;
-            }
-
-            usleep(100);
-            continue;
-        }
-
-        if (mCurrentVideoFormat == POA_RGB24)
-            for (uint32_t i = 0; i < totalBytes; i += 3)
-                std::swap(targetFrame[i], targetFrame[i + 2]);
-
-        Streamer->newFrame(targetFrame, totalBytes);
-    }
-#else
     uint8_t *targetFrame = PrimaryCCD.getFrameBuffer();
     uint32_t totalBytes  = PrimaryCCD.getFrameBufferSize();
     int waitMS           = static_cast<int>((ExposureRequest / 1000.0) + 500);
@@ -212,7 +184,7 @@ void POACCD::workerStreamVideo(const std::atomic_bool &isAbortToQuit)
         while(pIsReady == POA_FALSE)
         {
             if (isAbortToQuit) break;
-                
+
             POAImageReady(mCameraInfo.cameraID, &pIsReady);
         }
         if (isAbortToQuit) break;
@@ -228,15 +200,14 @@ void POACCD::workerStreamVideo(const std::atomic_bool &isAbortToQuit)
             }
             continue;
         }
-        
+
         if (mCurrentVideoFormat == POA_RGB24)
             for (uint32_t i = 0; i < totalBytes; i += 3)
                 std::swap(targetFrame[i], targetFrame[i + 2]);
-        
+
         Streamer->newFrame(targetFrame, totalBytes);
     }
-#endif
-    
+
     // stop video capture
     POAStopExposure(mCameraInfo.cameraID);
 }
@@ -267,33 +238,11 @@ void POACCD::workerBlinkExposure(const std::atomic_bool &isAbortToQuit, int blin
             LOGF_ERROR("Failed to start blink exposure (%s).", Helpers::toString(ret));
             break;
         }
-        
-#ifdef ASI_LEGACY
-        POACameraState status = STATE_EXPOSING;
-        do
-        {
-            if (isAbortToQuit)
-                return;
-
-            usleep(100 * 1000);
-            ret = POAGetCameraState(mCameraInfo.cameraID, &status);
-        }
-        while (ret == POA_OK && status == STATE_EXPOSING);
-
-        POABool pIsReady = POA_FALSE;
-        POAImageReady(mCameraInfo.cameraID, &pIsReady);
-        
-        if (pIsReady != POA_TRUE)
-        {
-            LOGF_ERROR("Blink exposure failed, status %d (%s).", status, Helpers::toString(ret));
-            break;
-        }
-#else
         POABool pIsReady = POA_FALSE;
         while(pIsReady == POA_FALSE)
         {
             if (isAbortToQuit) return;
-            
+
             ret = POAImageReady(mCameraInfo.cameraID, &pIsReady);
             if (ret != POA_OK)
             {
@@ -303,7 +252,6 @@ void POACCD::workerBlinkExposure(const std::atomic_bool &isAbortToQuit, int blin
                 break;
             }
         }
-#endif
     }
     while (--blinks > 0);
 
@@ -325,7 +273,7 @@ void POACCD::workerExposure(const std::atomic_bool &isAbortToQuit, float duratio
     PrimaryCCD.setExposureDuration(duration);
 
     LOGF_DEBUG("StartExposure->setexp : %.3fs", duration);
-    
+
     confVal.intValue = (long)(duration * 1000 * 1000);
     ret = POASetConfig(mCameraInfo.cameraID, POA_EXPOSURE, confVal, POA_FALSE);
     if (ret != POA_OK)
@@ -343,27 +291,11 @@ void POACCD::workerExposure(const std::atomic_bool &isAbortToQuit, float duratio
         // Wait 100ms before trying again
         usleep(100 * 1000);
 
-#ifdef ASI_LEGACY
-        // JM 2020-02-17 Special hack for older ASI120 and ASI130 cameras (USB 2.0)
-        // that fail on 16bit images.
-        if (getImageType() == POA_RAW16 &&
-            (strstr(getDeviceName(), "ASI120") || (strstr(getDeviceName(), "ASI130"))))
-        {
-            LOG_INFO("Switching to 8-bit video.");
-            setVideoFormat(POA_RAW8);
-        }
-#endif
-        //POAStopExposure(mCameraInfo.cameraID);
     }
 
     if (ret != POA_OK)
     {
-        LOG_WARN(
-            "PlayerOne firmware might require an update to *compatible mode."
-#ifdef ASI_LEGACY
-            "Check http://www.indilib.org/devices/ccds/zwo-optics-asi-cameras.html for details."
-#endif
-        );
+        LOG_WARN("PlayerOne firmware might require an update to *compatible mode.");
         return;
     }
 
@@ -375,7 +307,7 @@ void POACCD::workerExposure(const std::atomic_bool &isAbortToQuit, float duratio
     int statRetry = 0;
     POACameraState status = STATE_EXPOSING;
     POABool pIsReady = POA_FALSE;
-    
+
     do
     {
         if (isAbortToQuit)
@@ -435,7 +367,7 @@ void POACCD::workerExposure(const std::atomic_bool &isAbortToQuit, float duratio
             PrimaryCCD.setExposureFailed();
             return;
         }
-        
+
         POAImageReady(mCameraInfo.cameraID, &pIsReady);
     }
     while (pIsReady != POA_TRUE);
@@ -563,9 +495,7 @@ bool POACCD::updateProperties()
         if (HasCooler())
         {
             defineProperty(CoolerNP);
-            loadConfig(true, CoolerNP.getName());
             defineProperty(CoolerSP);
-            loadConfig(true, CoolerSP.getName());
         }
         // Even if there is no cooler, we define temperature property as READ ONLY
         else
@@ -577,13 +507,11 @@ bool POACCD::updateProperties()
         if (!ControlNP.isEmpty())
         {
             defineProperty(ControlNP);
-            loadConfig(true, ControlNP.getName());
         }
 
         if (!ControlSP.isEmpty())
         {
             defineProperty(ControlSP);
-            loadConfig(true, ControlSP.getName());
         }
 
         if (!VideoFormatSP.isEmpty())
@@ -597,12 +525,15 @@ bool POACCD::updateProperties()
             {
                 for (size_t i = 0; i < VideoFormatSP.size(); i++)
                 {
+                    CaptureFormatSP[i].setState(ISS_OFF);
                     if (mCameraInfo.imgFormats[i] == POA_RAW16)
                     {
                         setVideoFormat(i);
+                        CaptureFormatSP[i].setState(ISS_ON);
                         break;
                     }
                 }
+                CaptureFormatSP.apply();
             }
         }
 
@@ -698,18 +629,13 @@ bool POACCD::Disconnect()
     }
 
     LOG_INFO("Camera is offline.");
-
-
-    setConnected(false, IPS_IDLE);
     return true;
 }
 
 void POACCD::setupParams()
 {
     int piNumberOfControls = 0;
-    POAErrors ret;
-
-    ret = POAGetConfigsCount(mCameraInfo.cameraID, &piNumberOfControls);
+    POAErrors ret = POAGetConfigsCount(mCameraInfo.cameraID, &piNumberOfControls);
 
     if (ret != POA_OK)
         LOGF_ERROR("Failed to get number of controls (%s).", Helpers::toString(ret));
@@ -799,13 +725,19 @@ void POACCD::setupParams()
 
         node.setAux(const_cast<POAImgFormat*>(&videoFormat));
         VideoFormatSP.push(std::move(node));
+        CaptureFormat format = {Helpers::toString(videoFormat),
+                                Helpers::toPrettyString(videoFormat),
+                                static_cast<uint8_t>((videoFormat == POA_RAW16) ? 16 : 8),
+                                videoFormat == imgType
+                               };
+        addCaptureFormat(format);
     }
 
-    float x_pixel_size = mCameraInfo.pixelSize;
-    float y_pixel_size = mCameraInfo.pixelSize;
+    auto x_pixel_size = mCameraInfo.pixelSize;
+    auto y_pixel_size = mCameraInfo.pixelSize;
 
-    uint32_t maxWidth = mCameraInfo.maxWidth;
-    uint32_t maxHeight = mCameraInfo.maxHeight;
+    auto maxWidth = mCameraInfo.maxWidth;
+    auto maxHeight = mCameraInfo.maxHeight;
 
 #if 0
     // JM 2019-04-22
@@ -916,6 +848,7 @@ bool POACCD::ISNewNumber(const char *dev, const char *name, double values[], cha
 
             ControlNP.setState(IPS_OK);
             ControlNP.apply();
+            saveConfig(true, ControlNP.getName());
             return true;
         }
 
@@ -923,6 +856,7 @@ bool POACCD::ISNewNumber(const char *dev, const char *name, double values[], cha
         {
             BlinkNP.setState(BlinkNP.update(values, names, n) ? IPS_OK : IPS_ALERT);
             BlinkNP.apply();
+            saveConfig(true, BlinkNP.getName());
             return true;
         }
     }
@@ -1218,7 +1152,7 @@ bool POACCD::UpdateCCDFrame(int x, int y, int w, int h)
         LOGF_ERROR("Failed to set ROI image format (%s).", Helpers::toString(ret));
         return false;
     }
-    
+
     ret = POASetImageStartPos(mCameraInfo.cameraID, subX, subY);
     if (ret != POA_OK)
     {
@@ -1346,18 +1280,19 @@ bool POACCD::isMonoBinActive()
     {
         return false;
     }
-    
+
     int width = 0, height = 0, bin = 1;
     POAImgFormat imgType = POA_RAW8;
     POAErrors ret1, ret2, ret3;
-    
+
     ret1 = POAGetImageSize(mCameraInfo.cameraID, &width, &height);
     ret2 = POAGetImageBin(mCameraInfo.cameraID, &bin);
     ret3 = POAGetImageFormat(mCameraInfo.cameraID, &imgType);
-    
+
     if (ret1 != POA_OK || ret2 != POA_OK || ret3 != POA_OK)
     {
-        LOGF_ERROR("Failed to get ROI format (%s, %s, %s).", Helpers::toString(ret1), Helpers::toString(ret2), Helpers::toString(ret3));
+        LOGF_ERROR("Failed to get ROI format (%s, %s, %s).", Helpers::toString(ret1), Helpers::toString(ret2),
+                   Helpers::toString(ret3));
         return false;
     }
 
@@ -1434,7 +1369,7 @@ IPState POACCD::guidePulse(INDI::Timer &timer, float ms, POAConfig dir)
     POASetConfig(mCameraInfo.cameraID, dir, confVal, POA_FALSE); // start to guide
 #endif
     LOGF_DEBUG("Starting %s guide for %f ms.", Helpers::toString(dir), ms);
-    
+
     timer.callOnTimeout([this, dir]
     {
 #ifdef ASI_LEGACY
@@ -1445,7 +1380,7 @@ IPState POACCD::guidePulse(INDI::Timer &timer, float ms, POAConfig dir)
         POASetConfig(mCameraInfo.cameraID, dir, confVal, POA_FALSE); // stop to guide
 #endif
         LOGF_DEBUG("Stopped %s guide.", Helpers::toString(dir));
-        
+
         if (dir == POA_GUIDE_NORTH || dir == POA_GUIDE_SOUTH)
             GuideComplete(AXIS_DE);
         else if (dir == POA_GUIDE_EAST || dir == POA_GUIDE_WEST)
@@ -1527,10 +1462,10 @@ void POACCD::createControls(int piNumberOfControls)
                    cap.isWritable ? "True" : "False");
 
         if (cap.isWritable == POA_FALSE || cap.configID == POA_TARGET_TEMP || cap.configID == POA_COOLER ||
-            cap.configID == POA_GUIDE_NORTH || cap.configID == POA_GUIDE_SOUTH ||
-            cap.configID == POA_GUIDE_EAST || cap.configID == POA_GUIDE_WEST ||
-            cap.configID == POA_FLIP_NONE || cap.configID == POA_FLIP_HORI ||
-            cap.configID == POA_FLIP_VERT || cap.configID == POA_FLIP_BOTH)
+                cap.configID == POA_GUIDE_NORTH || cap.configID == POA_GUIDE_SOUTH ||
+                cap.configID == POA_GUIDE_EAST || cap.configID == POA_GUIDE_WEST ||
+                cap.configID == POA_FLIP_NONE || cap.configID == POA_FLIP_HORI ||
+                cap.configID == POA_FLIP_VERT || cap.configID == POA_FLIP_BOTH)
             continue;
 
         // Update Min/Max exposure as supported by the camera
@@ -1645,23 +1580,23 @@ void POACCD::updateRecorderFormat()
     );
 }
 
-void POACCD::addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip)
+void POACCD::addFITSKeywords(INDI::CCDChip *targetChip)
 {
-    INDI::CCD::addFITSKeywords(fptr, targetChip);
+    INDI::CCD::addFITSKeywords(targetChip);
 
     // e-/ADU
     auto np = ControlNP.findWidgetByName("Gain");
     if (np)
     {
         int status = 0;
-        fits_update_key_s(fptr, TDOUBLE, "Gain", &(np->value), "Gain", &status);
+        fits_update_key_s(*targetChip->fitsFilePointer(), TDOUBLE, "Gain", &(np->value), "Gain", &status);
     }
 
     np = ControlNP.findWidgetByName("Offset");
     if (np)
     {
         int status = 0;
-        fits_update_key_s(fptr, TDOUBLE, "OFFSET", &(np->value), "Offset", &status);
+        fits_update_key_s(*targetChip->fitsFilePointer(), TDOUBLE, "OFFSET", &(np->value), "Offset", &status);
     }
 }
 
@@ -1684,4 +1619,9 @@ bool POACCD::saveConfigItems(FILE *fp)
     BlinkNP.save(fp);
 
     return true;
+}
+
+bool POACCD::SetCaptureFormat(uint8_t index)
+{
+    return setVideoFormat(index);
 }
