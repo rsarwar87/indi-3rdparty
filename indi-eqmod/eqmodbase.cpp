@@ -299,9 +299,15 @@ bool EQMod::initProperties()
     getSwitch("ALIGNMENT_SUBSYSTEM_ACTIVE")->sp[0].s = ISS_ON;
 #endif
 
+#ifdef _KOHERON
+
+#else
     tcpConnection->setDefaultHost("192.168.4.1");
     tcpConnection->setDefaultPort(11880);
     tcpConnection->setConnectionType(Connection::TCP::TYPE_UDP);
+      //tcpConnection->setDefaultHost("192.168.1.188");
+      //tcpConnection->setDefaultPort(11880);
+#endif
 
     addAuxControls();
     return true;

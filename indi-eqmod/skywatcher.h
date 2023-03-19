@@ -285,8 +285,8 @@ class Skywatcher
 #else
         uint32_t koheron_server_port;
         std::string koheron_server_ip;
-        uint32_t minperiods[2];
 #endif
+        uint32_t minperiods[2];
 
         uint32_t Revu24str2long(char *);
         uint32_t Highstr2long(char *);

@@ -50,6 +50,7 @@ bool Skywatcher::isDebug()
     return debug;
 }
 
+#ifdef _KOHERON
 bool Skywatcher::setKoheronInfo(const char * ip, int port)
 {
   if (ip == nullptr)
@@ -69,6 +70,7 @@ bool Skywatcher::setKoheronInfo(const char * ip, int port)
   LOGF_INFO("%s(): IP: %s, Port: %u", __func__, ip, port);
   return true;
 }
+#endif
 
 void Skywatcher::setPortFD(int value)
 {
