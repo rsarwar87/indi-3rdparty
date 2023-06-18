@@ -388,7 +388,6 @@ bool GPhotoCCD::updateProperties()
         defineProperty(&SDCardImageSP);
 
         imageBP = getBLOB("CCD1");
-        imageB  = imageBP->bp;
 
         // Dummy values until first capture is done
         //SetCCDParams(1280, 1024, 8, 5.4, 5.4);
@@ -1064,9 +1063,9 @@ bool GPhotoCCD::AbortExposure()
 
 bool GPhotoCCD::UpdateCCDFrame(int x, int y, int w, int h)
 {
-    if (EncodeFormatSP[FORMAT_FITS].getState() != ISS_ON)
+    if (EncodeFormatSP[FORMAT_FITS].getState() != ISS_ON && EncodeFormatSP[FORMAT_XISF].getState() != ISS_ON)
     {
-        LOG_ERROR("Subframing is only supported in FITS encode mode.");
+        LOG_ERROR("Subframing is only supported in FITS/XISF encode mode.");
         return false;
     }
 
@@ -1085,9 +1084,9 @@ bool GPhotoCCD::UpdateCCDBin(int hor, int ver)
     else
     {
         // only for fits output
-        if (EncodeFormatSP[FORMAT_FITS].getState() != ISS_ON)
+        if (EncodeFormatSP[FORMAT_FITS].getState() != ISS_ON && EncodeFormatSP[FORMAT_XISF].getState() != ISS_ON)
         {
-            LOG_ERROR("Binning is only supported in FITS transport mode.");
+            LOG_ERROR("Binning is only supported in FITS/XISF transport mode.");
             return false;
         }
 
@@ -1215,7 +1214,7 @@ bool GPhotoCCD::grabImage()
         ExposureComplete(&PrimaryCCD);
         gphoto_read_exposure_fd(gphotodrv, -1);
     }
-    else if (EncodeFormatSP[FORMAT_FITS].getState() == ISS_ON)
+    else if (EncodeFormatSP[FORMAT_FITS].getState() == ISS_ON || EncodeFormatSP[FORMAT_XISF].getState() == ISS_ON)
     {
         char filename[MAXRBUF] = "/tmp/indi_XXXXXX";
         const char *extension = "unknown";
@@ -1305,7 +1304,10 @@ bool GPhotoCCD::grabImage()
             SetCCDCapability(GetCCDCapability() | CCD_HAS_BAYER);
         }
 
-        PrimaryCCD.setImageExtension("fits");
+        if (EncodeFormatSP[FORMAT_FITS].getState() == ISS_ON)
+            PrimaryCCD.setImageExtension("fits");
+        else
+            PrimaryCCD.setImageExtension("xisf");
 
         uint16_t subW = PrimaryCCD.getSubW();
         uint16_t subH = PrimaryCCD.getSubH();
@@ -2005,12 +2007,11 @@ bool GPhotoCCD::startLivePreview()
 
     char * previewBlob = (char *)previewData;
 
-    imageB->blob    = previewBlob;
-    imageB->bloblen = previewSize;
-    imageB->size    = previewSize;
-    strncpy(imageB->format, "stream_jpeg", MAXINDIBLOBFMT);
-
-    IDSetBLOB(imageBP, nullptr);
+    imageBP[0].setBlob(previewBlob);
+    imageBP[0].setBlobLen(previewSize);
+    imageBP[0].setSize(previewSize);
+    imageBP[0].setFormat("stream_jpeg");
+    imageBP.apply();
 
     if (previewFile)
     {
@@ -2067,13 +2068,9 @@ bool GPhotoCCD::saveConfigItems(FILE * fp)
     return true;
 }
 
-void GPhotoCCD::addFITSKeywords(INDI::CCDChip * targetChip)
+void GPhotoCCD::addFITSKeywords(INDI::CCDChip * targetChip, std::vector<INDI::FITSRecord> &fitsKeywords)
 {
-    auto fptr = *targetChip->fitsFilePointer();
-
-    INDI::CCD::addFITSKeywords(targetChip);
-
-    int status = 0;
+    INDI::CCD::addFITSKeywords(targetChip, fitsKeywords);
 
     if (mIsoSP.nsp > 0)
     {
@@ -2082,13 +2079,13 @@ void GPhotoCCD::addFITSKeywords(INDI::CCDChip * targetChip)
         {
             int isoSpeed = atoi(onISO->label);
             if (isoSpeed > 0)
-                fits_update_key_s(fptr, TUINT, "ISOSPEED", &isoSpeed, "ISO Speed", &status);
+                fitsKeywords.push_back({"ISOSPEED", isoSpeed, "ISO Speed"});
         }
     }
 
     if (isTemperatureSupported)
     {
-        fits_update_key_s(fptr, TDOUBLE, "CCD-TEMP", &(TemperatureN[0].value), "CCD Temperature (Celsius)", &status);
+        fitsKeywords.push_back({"CCD-TEMP", TemperatureN[0].value, 3, "CCD Temperature (Celsius)"});
     }
 }
 

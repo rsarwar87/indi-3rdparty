@@ -150,6 +150,9 @@ bool SVBONYCCD::updateProperties()
         defineProperty(&ControlsNP[CCD_GAMMA_N]);
         defineProperty(&ControlsNP[CCD_DOFFSET_N]);
 
+        // a switch for automatic correction of dynamic dead pixels
+        defineProperty(&CorrectDDPSP);
+
         // define frame rate
         defineProperty(&SpeedSP);
 
@@ -176,6 +179,9 @@ bool SVBONYCCD::updateProperties()
         deleteProperty(ControlsNP[CCD_WBB_N].name);
         deleteProperty(ControlsNP[CCD_GAMMA_N].name);
         deleteProperty(ControlsNP[CCD_DOFFSET_N].name);
+
+        // a switch for automatic correction of dynamic dead pixels
+        deleteProperty(CorrectDDPSP.name);
 
         // delete frame rate
         deleteProperty(SpeedSP.name);
@@ -215,6 +221,15 @@ bool SVBONYCCD::Connect()
 
     // wait a bit for the camera to get ready
     usleep(0.5 * 1e6);
+
+    // Restore default parameters of SVBONY CCD Camera
+    status = SVBRestoreDefaultParam(cameraID);
+    if (status != SVB_SUCCESS)
+    {
+        LOGF_ERROR("Error, restore default parameters failed.:%d", status);
+        pthread_mutex_unlock(&cameraID_mutex);
+        return false;
+    }
 
     // disable suto save param
     status = SVBSetAutoSaveParam(cameraID, SVB_FALSE);
@@ -450,6 +465,20 @@ bool SVBONYCCD::Connect()
                 if(status != SVB_SUCCESS)
                 {
                     LOG_ERROR("Error, camera set offset failed\n");
+                }
+                break;
+
+            case SVB_BAD_PIXEL_CORRECTION_ENABLE :
+                // a switch for automatic correction of dynamic dead pixels
+                // set the status to disable
+                IUFillSwitch(&CorrectDDPS[CORRECT_DDP_ENABLE], "CORRECT_DDP_ENABLE", "ENABLE", ISS_OFF);
+                IUFillSwitch(&CorrectDDPS[CORRECT_DDP_DISABLE], "CORRECT_DDP_DISABLE", "DISABLE", ISS_ON);
+                IUFillSwitchVector(&CorrectDDPSP, CorrectDDPS, 2, getDeviceName(), "CORRECT_DDP", "Correct Dead pixel", MAIN_CONTROL_TAB, IP_WO, ISR_1OFMANY, 60, IPS_IDLE);
+
+                status = SVBSetControlValue(cameraID, SVB_BAD_PIXEL_CORRECTION_ENABLE, 0, SVB_FALSE);
+                if(status != SVB_SUCCESS)
+                {
+                    LOGF_ERROR("Error, set a switch for automatic correction of dynamic dead pixels:%d", status);
                 }
                 break;
 
@@ -776,9 +805,10 @@ bool SVBONYCCD::StartExposure(float duration)
 
     pthread_mutex_lock(&cameraID_mutex);
 
+#ifdef WORKAROUND_latest_image_can_be_getten_next_time
     // Discard unretrieved exposure data
     discardVideoData();
-
+#endif
     // set exposure time (s -> us)
     status = SVBSetControlValue(cameraID, SVB_EXPOSURE, (long)(duration * 1000000L), SVB_FALSE);
     if(status != SVB_SUCCESS)
@@ -810,6 +840,7 @@ bool SVBONYCCD::StartExposure(float duration)
     return true;
 }
 
+#ifdef WORKAROUND_latest_image_can_be_getten_next_time
 // Discard unretrieved exposure data
 void SVBONYCCD::discardVideoData()
 {
@@ -817,6 +848,7 @@ void SVBONYCCD::discardVideoData()
     SVB_ERROR_CODE status = SVBGetVideoData(cameraID, imageBuffer, PrimaryCCD.getFrameBufferSize(),  1000);
     LOGF_DEBUG("Discard unretrieved exposure data: SVBGetVideoData:result=%d", status);
 }
+#endif
 
 //
 bool SVBONYCCD::AbortExposure()
@@ -1531,6 +1563,55 @@ bool SVBONYCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, 
             IDSetSwitch(&CoolerSP, NULL);
             return true;
         }
+
+        // a switch for automatic correction of dynamic dead pixels
+        if (!strcmp(name, CorrectDDPSP.name))
+        {
+            SVB_ERROR_CODE ret;
+            long tmpCorrectDDPEnable = 0;
+            SVB_BOOL bAuto;
+
+            // Find out which state is requested by the client
+            const char *actionName = IUFindOnSwitchName(states, names, n);
+            // If same state as actionName, then we do nothing
+            tmpCorrectDDPEnable = IUFindOnSwitchIndex(&CorrectDDPSP);
+            if (!strcmp(actionName, CorrectDDPS[tmpCorrectDDPEnable].name))
+            {
+                LOGF_INFO("Automatic correction of dynamic dead pixels is already %s", CorrectDDPS[tmpCorrectDDPEnable].label);
+                CorrectDDPSP.s = IPS_IDLE;
+                IDSetSwitch(&CorrectDDPSP, NULL);
+                return true;
+            }
+
+            // Otherwise, let us update the switch state
+            IUUpdateSwitch(&CorrectDDPSP, states, names, n);
+            tmpCorrectDDPEnable = IUFindOnSwitchIndex(&CorrectDDPSP);
+
+            LOGF_INFO("Automatic correction of dynamic dead pixels %s", CorrectDDPS[tmpCorrectDDPEnable].label);
+
+            correctDDPEnable = tmpCorrectDDPEnable;
+
+            // Change switch for automatic correction of dynamic dead pixels
+            if (SVB_SUCCESS != (ret = SVBSetControlValue(cameraID, SVB_BAD_PIXEL_CORRECTION_ENABLE, (correctDDPEnable == CORRECT_DDP_ENABLE ? 1 : 0), SVB_FALSE)))
+            {
+                LOGF_INFO("Setting automatic correction of dynamic dead pixels is fail.(SVB_BAD_PIXEL_CORRECTION_ENABLE:%d)", ret);
+            }
+
+            CorrectDDPSP.s = IPS_OK;
+            IDSetSwitch(&CorrectDDPSP, NULL);
+
+            // Get switch for automatic correction of dynamic dead pixels
+            if (SVB_SUCCESS == (ret = SVBGetControlValue(cameraID, SVB_BAD_PIXEL_CORRECTION_ENABLE, &tmpCorrectDDPEnable, &bAuto)))
+            {
+                LOGF_INFO("Automatic correction of dynamic dead pixels:%ld", tmpCorrectDDPEnable);                
+            } 
+            else
+            {
+                LOGF_INFO("Getting automatic correction of dynamic dead pixels is fail.(SVB_BAD_PIXEL_CORRECTION_ENABLE:%d)", ret);
+            }
+
+            return true;
+        }
     }
 
     // If we did not process the switch, let us pass it to the parent class to process it
@@ -1601,6 +1682,7 @@ bool SVBONYCCD::saveConfigItems(FILE * fp)
     IUSaveConfigNumber(fp, &ControlsNP[CCD_WBB_N]);
     IUSaveConfigNumber(fp, &ControlsNP[CCD_GAMMA_N]);
     IUSaveConfigNumber(fp, &ControlsNP[CCD_DOFFSET_N]);
+    IUSaveConfigSwitch(fp, &CorrectDDPSP);
 
     IUSaveConfigSwitch(fp, &SpeedSP);
 
@@ -1611,30 +1693,28 @@ bool SVBONYCCD::saveConfigItems(FILE * fp)
 }
 
 
-void SVBONYCCD::addFITSKeywords(INDI::CCDChip *targetChip)
+void SVBONYCCD::addFITSKeywords(INDI::CCDChip *targetChip, std::vector<INDI::FITSRecord> &fitsKeywords)
 {
-    INDI::CCD::addFITSKeywords(targetChip);
-    auto fptr = *targetChip->fitsFilePointer();
+    INDI::CCD::addFITSKeywords(targetChip, fitsKeywords);
 
     // report controls in FITS file
-    int _status = 0;
-    fits_update_key_dbl(fptr, "Gain", ControlsN[CCD_GAIN_N].value, 3, "Gain", &_status);
-    fits_update_key_dbl(fptr, "Contrast", ControlsN[CCD_CONTRAST_N].value, 3, "Contrast", &_status);
-    fits_update_key_dbl(fptr, "Sharpness", ControlsN[CCD_SHARPNESS_N].value, 3, "Sharpness", &_status);
+    fitsKeywords.push_back({"GAIN", ControlsN[CCD_GAIN_N].value, 3, "Gain"});
+    fitsKeywords.push_back({"CONTRAST", ControlsN[CCD_CONTRAST_N].value, 3, "Contrast"});
+    fitsKeywords.push_back({"SHARPNESS", ControlsN[CCD_SHARPNESS_N].value, 3, "Sharpness"});
 
     // Add items for color camera
     if(HasBayer())
     {
-        fits_update_key_dbl(fptr, "Saturation", ControlsN[CCD_SATURATION_N].value, 3, "Saturation", &_status);
-        fits_update_key_dbl(fptr, "Red White Balance", ControlsN[CCD_WBR_N].value, 3, "Red White Balance", &_status);
-        fits_update_key_dbl(fptr, "Green White Balance", ControlsN[CCD_WBG_N].value, 3, "Green White Balance", &_status);
-        fits_update_key_dbl(fptr, "Blue White Balance", ControlsN[CCD_WBB_N].value, 3, "Blue White Balance", &_status);
+        fitsKeywords.push_back({"SATURATION", ControlsN[CCD_SATURATION_N].value, 3, "Saturation"});
+        fitsKeywords.push_back({"RED WHITE BALANCE", ControlsN[CCD_WBR_N].value, 3, "Red White Balance"});
+        fitsKeywords.push_back({"GREEN WHITE BALANCE", ControlsN[CCD_WBG_N].value, 3, "Green White Balance"});
+        fitsKeywords.push_back({"BLUE WHITE BALANCE", ControlsN[CCD_WBB_N].value, 3, "Blue White Balance"});
     }
 
-    fits_update_key_dbl(fptr, "Gamma", ControlsN[CCD_GAMMA_N].value, 3, "Gamma", &_status);
-    fits_update_key_dbl(fptr, "Frame Speed", frameSpeed, 3, "Frame Speed", &_status);
-    fits_update_key_dbl(fptr, "Offset", ControlsN[CCD_DOFFSET_N].value, 3, "Offset", &_status);
-    fits_update_key_dbl(fptr, "16 bits stretch factor (bit shift)", bitStretch, 3, "Stretch factor", &_status);
+    fitsKeywords.push_back({"GAMMA", ControlsN[CCD_GAMMA_N].value, 3, "Gamma"});
+    fitsKeywords.push_back({"FRAME SPEED", frameSpeed, "Frame Speed"});
+    fitsKeywords.push_back({"OFFSET", ControlsN[CCD_DOFFSET_N].value, 3, "Offset"});
+    fitsKeywords.push_back({"16 BITS STRETCH FACTOR (BIT SHIFT)", bitStretch, "Stretch factor"});
 }
 
 
