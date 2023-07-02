@@ -89,6 +89,7 @@ class Skywatcher
         INDI_DEPRECATED("Use InquireBoardVersion(INDI::PropertyText).")
         void InquireBoardVersion(ITextVectorProperty *boardTP);
         void InquireBoardVersion(INDI::PropertyText boardTP);
+        void InquireBoardVersion(char **boardinfo);
 
         void InquireFeatures();
 
@@ -99,6 +100,7 @@ class Skywatcher
         INDI_DEPRECATED("Use InquireDEEncoderInfo(INDI::PropertyNumber).")
         void InquireDEEncoderInfo(INumberVectorProperty *encoderNP);
         void InquireDEEncoderInfo(INDI::PropertyNumber encoderNP);
+
 
         void Init();
         void SlewRA(double rate);
@@ -271,6 +273,7 @@ class Skywatcher
         struct timeval lastreadmotorposition[NUMBER_OF_SKYWATCHERAXIS];
 
         // Functions
+        void InquireEncoderInfo(SkywatcherAxis axis, double *steppersvalues);
         void CheckMotorStatus(SkywatcherAxis axis);
         void ReadMotorStatus(SkywatcherAxis axis);
         void SetMotion(SkywatcherAxis axis, SkywatcherAxisStatus newstatus);
