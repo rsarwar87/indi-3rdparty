@@ -152,6 +152,7 @@ class Skywatcher
 
         void setPortFD(int value);
 #ifdef _KOHERON
+        std::array<uint16_t, 2> encoder_readback;
         std::unique_ptr<ASCOM_sky_interface> koheron_interface;
         bool setKoheronInfo(const char * ip, int port);
         void UpdateMinPeriod();

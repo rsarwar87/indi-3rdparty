@@ -532,9 +532,11 @@ bool EQMod::loadProperties()
     MotorTypeRATP[0].fill("VALUE","RA Motor","-");
     MotorTypeDETP[0].fill("VALUE","DEC Motor","-");
     PECTP[0].fill("VALUE","PEC Status","-");
-    MotorTypeRATP.fill(getDeviceName(), "MotorTypeRATP", "MotorType", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
-    MotorTypeDETP.fill(getDeviceName(), "MotorTypeDETP", "MotorType", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
-    PECTP.fill(getDeviceName(), "PECACTIVE", "PEC", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
+    PECErrorTP[0].fill("VALUE","Encoder Error","-");
+    MotorTypeRATP.fill(getDeviceName(), "MotorTypeRATP", "RAMotorType", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
+    MotorTypeDETP.fill(getDeviceName(), "MotorTypeDETP", "DeMotorType", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
+    PECTP.fill(getDeviceName(), "PEC", "Encoder", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
+    PECErrorTP.fill(getDeviceName(), "PECERROR", "EncoderError", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
 #endif
 
 
@@ -633,6 +635,7 @@ bool EQMod::updateProperties()
 		    defineProperty(&DeviceValNP);
 		    defineProperty(MotorTypeRATP);
 		    defineProperty(MotorTypeDETP);
+		    defineProperty(PECErrorTP);
 		    defineProperty(PECTP);
 
 #endif
@@ -812,9 +815,10 @@ bool EQMod::updateProperties()
 #endif
 #ifdef _KOHERON
 		deleteProperty(MotorTypeRATP);
-		deleteProperty(MotorTypeSP);
+		deleteProperty(MotorTypeSP.name);
 		deleteProperty(MotorTypeDETP);
 		deleteProperty(PECTP);
+		deleteProperty(PECErrorTP);
 		deleteProperty(PECEnableSP.name);
 		deleteProperty(ServerDebugSP.name);
 		deleteProperty(ResetAbsPosSP.name);

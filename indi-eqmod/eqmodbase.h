@@ -120,6 +120,7 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
         INDI::PropertyText     MotorTypeRATP  {1};
         INDI::PropertyText     MotorTypeDETP  {1};
         INDI::PropertyText     PECTP  {1};
+        INDI::PropertyText     PECErrorTP  {1};
 
         bool pec_enable = false;
     protected:

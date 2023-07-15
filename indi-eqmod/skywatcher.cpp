@@ -945,6 +945,7 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
     const char *drv[] = {"DRV8825" };
     const char *en[] = {"Active" };
     const char *dis[] = {"Inactive" };
+    const char *err[] = {"Error" };
     std::array<bool, 10> response = koheron_interface->SwpGetAxisStatus(axis);
     switch (axis)
     {
@@ -962,6 +963,10 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
             telescope->MotorTypeRATP.apply();
             telescope->PECTP.update(response[8] ? en : dis, (char **)propnames, 1);
             telescope->PECTP.apply();
+
+            encoder_readback = koheron_interface->get_iic_encoder();
+            telescope->PECErrorTP.update(encoder_readback[1] & 0x1 ? err : en, (char **)propnames, 1);
+            telescope->PECErrorTP.apply();
             break;
                 
         case Axis2:
@@ -1425,7 +1430,7 @@ void Skywatcher::StartRATracking(double trackspeed)
 #ifdef _KOHERON
         {
           bool pec = false;
-          if (telescope->pec_enable && (rate < 1.1) && (rate > 0.9))
+          if (!(encoder_readback[1] & 0x1) && telescope->pec_enable && (rate < 1.1) && (rate > 0.9))
             pec = true;
           if (!koheron_interface->SwpCmdStartMotion(Axis1, true, pec, true))
           {
