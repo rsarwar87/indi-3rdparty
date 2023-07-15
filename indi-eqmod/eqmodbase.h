@@ -116,7 +116,16 @@ class EQMod : public INDI::Telescope, public INDI::GuiderInterface
         ISwitchVectorProperty AlignMethodSP;
 #endif
 #ifdef _KOHERON
+    public:
+        INDI::PropertyText     MotorTypeRATP  {1};
+        INDI::PropertyText     MotorTypeDETP  {1};
+        INDI::PropertyText     PECTP  {1};
 
+        bool pec_enable = false;
+    protected:
+
+	      ISwitch PECEnableS[2];
+	      ISwitchVectorProperty PECEnableSP;
 	      ISwitch ServerDebugrS[2];
 	      ISwitchVectorProperty ServerDebugSP;
 	      ISwitch MotorTypeS[2];

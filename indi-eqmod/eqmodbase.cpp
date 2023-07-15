@@ -465,13 +465,17 @@ bool EQMod::loadProperties()
 
   const char * KOHERON_TAB = "Koheron Settings";
 	// Compensate for temperature
+	IUFillSwitch(&PECEnableS[0], "Enable", "", ISS_OFF);
+	IUFillSwitch(&PECEnableS[1], "Disable", "", ISS_ON);
+	IUFillSwitchVector(&PECEnableSP, PECEnableS, 2, getDeviceName(), "PEC Enable", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+
 	IUFillSwitch(&ServerDebugrS[0], "Enable", "", ISS_OFF);
 	IUFillSwitch(&ServerDebugrS[1], "Disable", "", ISS_ON);
-	IUFillSwitchVector(&ServerDebugSP, ServerDebugrS, 2, getDeviceName(), "Enable SysLog Debugger in koheron server", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+	IUFillSwitchVector(&ServerDebugSP, ServerDebugrS, 2, getDeviceName(), "Debugger", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 	// Compensate for temperature
 	IUFillSwitch(&MotorTypeS[0], "DRV8825", "", ISS_OFF);
 	IUFillSwitch(&MotorTypeS[1], "TMC2226", "", ISS_ON);
-	IUFillSwitchVector(&MotorTypeSP, MotorTypeS, 2, getDeviceName(), "Switch between DRV8825 and TMC2226", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+	IUFillSwitchVector(&MotorTypeSP, MotorTypeS, 2, getDeviceName(), "Motor Type", "", KOHERON_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
 	// Reset absolute possition
 	IUFillSwitch(&ResetAbsPosS[0],"RESET_ABS","SetToPark",ISS_OFF);
@@ -520,6 +524,17 @@ bool EQMod::loadProperties()
 	IUFillNumber(&DeviceValN[8], "SR_VALUE", "Ticks/stepper rotation", "%.0f", 1, 255, 1, 200);
 	IUFillNumber(&DeviceValN[9], "DRIVER_VALUE", "1=TMC, 0=DRV", "%1.0f", 0, 1, 1, 0);
 	IUFillNumberVector(&DeviceValNP, DeviceValN, 10, getDeviceName(), "DEVICE_VALUE", "DeviceValues", KOHERON_TAB, IP_RO, 0, IPS_IDLE);
+    
+//  IUFillLight(&MotorTypeRATP, "RATYPE", "RAIsTMC2226", IPS_IDLE);
+//  IUFillLight(&MotorTypeDETP, "DECTYPE", "DEIsTMC2226", IPS_IDLE);
+//  IUFillLight(&PECEnabled, "PECACT", "PECActive", IPS_IDLE);
+//  drivers/telescope/lx200_pegasus_nyx101.cpp
+    MotorTypeRATP[0].fill("VALUE","RA Motor","-");
+    MotorTypeDETP[0].fill("VALUE","DEC Motor","-");
+    PECTP[0].fill("VALUE","PEC Status","-");
+    MotorTypeRATP.fill(getDeviceName(), "MotorTypeRATP", "MotorType", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
+    MotorTypeDETP.fill(getDeviceName(), "MotorTypeDETP", "MotorType", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
+    PECTP.fill(getDeviceName(), "PECACTIVE", "PEC", KOHERON_TAB, IP_RO, 60, IPS_IDLE);
 #endif
 
 
@@ -604,9 +619,10 @@ bool EQMod::updateProperties()
         defineProperty(ST4GuideRateWESP);
 
 #ifdef _KOHERON
+		    defineProperty(&PECEnableSP);
 		    defineProperty(&ServerDebugSP);
-		    defineProperty(&MotorTypeSP);
 		    defineProperty(&SaveDeviceeValSP);
+		    defineProperty(&MotorTypeSP);
 		    defineProperty(&RetrieveValSP);
 		    defineProperty(&ResetAbsPosSP);
 		    defineProperty(&MinimumPeriodNP);
@@ -615,6 +631,9 @@ bool EQMod::updateProperties()
 		    defineProperty(&StepsPerRotation0NP);
 		    defineProperty(&StepsPerRotation1NP);
 		    defineProperty(&DeviceValNP);
+		    defineProperty(MotorTypeRATP);
+		    defineProperty(MotorTypeDETP);
+		    defineProperty(PECTP);
 
 #endif
 
@@ -792,7 +811,11 @@ bool EQMod::updateProperties()
         deleteProperty(AlignSyncModeSP);
 #endif
 #ifdef _KOHERON
-		deleteProperty(MotorTypeSP.name);
+		deleteProperty(MotorTypeRATP);
+		deleteProperty(MotorTypeSP);
+		deleteProperty(MotorTypeDETP);
+		deleteProperty(PECTP);
+		deleteProperty(PECEnableSP.name);
 		deleteProperty(ServerDebugSP.name);
 		deleteProperty(ResetAbsPosSP.name);
 		deleteProperty(MinimumPeriodNP.name);
@@ -3289,8 +3312,8 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
                 SaveDeviceS[1].s = ISS_ON;
                 LOG_INFO("Sent new settings for koheron device.");
             }
-            ServerDebugSP.s = IPS_IDLE;
-            IDSetSwitch(&ServerDebugSP, nullptr);
+            SaveDeviceeValSP.s = IPS_IDLE;
+            IDSetSwitch(&SaveDeviceeValSP, nullptr);
 
             return true;
         }
@@ -3320,6 +3343,27 @@ bool EQMod::ISNewSwitch(const char *dev, const char *name, ISState *states, char
             return true;
         }
         // handle temperature compensation
+        if (!strcmp(name, PECEnableSP.name))
+        {
+            IUUpdateSwitch(&PECEnableSP, states, names, n);
+
+            if (PECEnableS[0].s == ISS_ON)
+            {
+	              pec_enable  = true; 
+                PECEnableSP.s = IPS_OK;
+                DEBUG(INDI::Logger::DBG_SESSION, "Enable Koheron PEC.");
+            }
+
+            if (PECEnableS[1].s == ISS_ON)
+            {
+	              pec_enable  = false; 
+                PECEnableSP.s = IPS_IDLE;
+                DEBUG(INDI::Logger::DBG_SESSION, "Disable Koheron PEC");
+            }
+
+            IDSetSwitch(&PECEnableSP, nullptr);
+            return true;
+        }
         if (!strcmp(name, ServerDebugSP.name))
         {
             IUUpdateSwitch(&ServerDebugSP, states, names, n);
@@ -3959,6 +4003,7 @@ bool EQMod::saveConfigItems(FILE *fp)
     if (HasPECState())
         PPECSP.save(fp);
 #ifdef _KOHERON
+	IUSaveConfigSwitch(fp, &PECEnableSP);
 	IUSaveConfigSwitch(fp, &ServerDebugSP);
 	IUSaveConfigSwitch(fp, &MotorTypeSP);
 	IUSaveConfigSwitch(fp, &ResetAbsPosSP);

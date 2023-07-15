@@ -114,6 +114,7 @@ bool Skywatcher::Handshake()
     }
 
     MCVersion = koheron_interface->SwpGetBoardVersion();
+    MountCode    = MCVersion & 0xFF;
     LOGF_INFO("%s(): Board Version: %u", __func__, MCVersion);
 #else
     uint32_t tmpMCVersion = 0;
@@ -561,7 +562,7 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     // should test this is ok
     IUUpdateText(boardTP, boardinfo, (char **)boardinfopropnames, nprop);
     IDSetText(boardTP, nullptr);
-    LOGF_DEBUG("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d", __FUNCTION__, MountCode,
+    LOGF_INFO("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d", __FUNCTION__, MountCode,
                MCVersion, minperiods[Axis1], minperiods[Axis2]);
     /* Check supported mounts here */
     /*if ((MountCode == 0x80) || (MountCode == 0x81) || (MountCode == 0x82) || (MountCode == 0x90)) {
@@ -586,7 +587,7 @@ void Skywatcher::InquireBoardVersion(INDI::PropertyText boardTP)
     // should test this is ok
     boardTP.update(boardinfo, (char **)boardinfopropnames, nprop);
     boardTP.apply();
-    LOGF_DEBUG("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d",
+    LOGF_INFO("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d",
                __FUNCTION__, MountCode, MCVersion, minperiods[Axis1], minperiods[Axis2]);
     /* Check supported mounts here */
     /*if ((MountCode == 0x80) || (MountCode == 0x81) || (MountCode == 0x82) || (MountCode == 0x90)) {
@@ -669,6 +670,9 @@ void Skywatcher::InquireBoardVersion(char **boardinfo)
             break;
         case 0x90:
             strcpy(boardinfo[0], "DOB");
+            break;
+        case 0x44:
+            strcpy(boardinfo[0], "FPGASkyTraker");
             break;
         case 0xA5:
             strcpy(boardinfo[0], "AZ-GTi");
@@ -936,7 +940,12 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
 {
 #ifdef _KOHERON
     // Initialized, running, direction, speedmode, isGoto, isSlew
-    std::array<bool, 8> response = koheron_interface->SwpGetAxisStatus(axis);
+    const char *propnames[] = {"VALUE" };
+    const char *tmc[] = {"TMC2666" };
+    const char *drv[] = {"DRV8825" };
+    const char *en[] = {"Active" };
+    const char *dis[] = {"Inactive" };
+    std::array<bool, 10> response = koheron_interface->SwpGetAxisStatus(axis);
     switch (axis)
     {
         case Axis1:
@@ -949,7 +958,12 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
                 RAStatus.slewmode = SLEW;
             if (response[4])
                 RAStatus.slewmode = GOTO;
+            telescope->MotorTypeRATP.update(response[9] ? tmc : drv, (char **)propnames, 1);
+            telescope->MotorTypeRATP.apply();
+            telescope->PECTP.update(response[8] ? en : dis, (char **)propnames, 1);
+            telescope->PECTP.apply();
             break;
+                
         case Axis2:
             DEInitialized      = response[0];
             DERunning          = response[1];
@@ -960,9 +974,12 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
                 DEStatus.slewmode = SLEW;
             if (response[4])
                 DEStatus.slewmode = GOTO;
+            telescope->MotorTypeDETP.update(response[9] ? tmc : drv, (char **)propnames, 1);
+            telescope->MotorTypeDETP.apply();
             break;
         default:
             break;
+
     }
 
 #else
@@ -1406,12 +1423,17 @@ void Skywatcher::StartRATracking(double trackspeed)
         SetRARate(rate);
         if (!RARunning)
 #ifdef _KOHERON
-            if (!koheron_interface->SwpCmdStartMotion(Axis1, true, false, true))
-            {
-                koheron_interface->print_error(__func__, " SwpSetStepPerSwpCmdStartMotioniod: Axis");
-                throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
-                                 Axis1);
-            }
+        {
+          bool pec = false;
+          if (telescope->pec_enable && (rate < 1.1) && (rate > 0.9))
+            pec = true;
+          if (!koheron_interface->SwpCmdStartMotion(Axis1, true, pec, true))
+          {
+              koheron_interface->print_error(__func__, " SwpSetStepPerSwpCmdStartMotioniod: Axis");
+              throw EQModError(EQModError::ErrCmdFailed, "%s(): Failed to set SwpCmdStartMotion: Axis%u", __func__,
+                               Axis1);
+          }
+        }
 #else
             StartMotor(Axis1);
 #endif
@@ -1463,7 +1485,11 @@ void Skywatcher::SetSpeed(SkywatcherAxis axis, uint32_t period, SkywatcherAxisSt
     else
         currentstatus = &DEStatus;
 #endif
-    if ((currentstatus->speedmode == HIGHSPEED) && (period < minperiods[axis]))
+    if (
+#ifndef _KOHERON
+        (currentstatus->speedmode == HIGHSPEED) && 
+#endif
+        (period < minperiods[axis]))
     {
         LOGF_WARN("Setting axis %c period to minimum. Requested is %d, minimum is %d\n", AxisCmd[axis], period,
                   minperiods[axis]);
