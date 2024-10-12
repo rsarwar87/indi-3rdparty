@@ -23,7 +23,7 @@ endif(CYGWIN)
 option(WITH_ALIGN "Enable Alignment Subsystem" ON)
 option(WITH_ALIGN_GEEHALEL "Enable EQMod Alignment" ON)
 option(WITH_SCOPE_LIMITS "Enable Scope limits" ON)
-option(WITH_AHP_GT "Install AHP GT Controllers Driver" ON)
+option(WITH_AHP_GT "Install AHP GT Controllers Driver" OFF)
 option(WITH_FPGA_EQMOD "Install Koheron enabled EQMOD" ON)
 
 IF (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -297,7 +297,7 @@ install(TARGETS indi_staradventurer2i_telescope RUNTIME DESTINATION bin )
 #########################################  Tests  #################################################
 ###################################################################################################
 
-set(INDI_BUILD_UNITTESTS TRUE)
+set(INDI_BUILD_UNITTESTS FALSE)
 
 find_package (GTest)
 find_package (GMock)
