@@ -534,6 +534,9 @@ bool EQMod::loadProperties()
 	IUFillNumber(&DeviceValN[9], "DRIVER_VALUE", "1=TMC, 0=DRV", "%1.0f", 0, 1, 1, 0);
 	IUFillNumberVector(&DeviceValNP, DeviceValN, 10, getDeviceName(), "DEVICE_VALUE", "DeviceValues", KOHERON_TAB, IP_RO, 0, IPS_IDLE);
     
+	IUFillNumber(&PECPosition[0], "PEC_ICC", "Encoder Position", "%.0f", 1, 255, 1, 200);
+	IUFillNumber(&PECPosition[1], "PEC_CORR", "Encoder Correction", "%.0f", 0, 1, 1, 0);
+	IUFillNumberVector(&PECPositionNP, PECPosition, 2, getDeviceName(), "PEC_VALUE", "PECValues", KOHERON_TAB, IP_RO, 0, IPS_IDLE);
 //  IUFillLight(&MotorTypeRATP, "RATYPE", "RAIsTMC2226", IPS_IDLE);
 //  IUFillLight(&MotorTypeDETP, "DECTYPE", "DEIsTMC2226", IPS_IDLE);
 //  IUFillLight(&PECEnabled, "PECACT", "PECActive", IPS_IDLE);
@@ -674,6 +677,7 @@ bool EQMod::updateProperties()
 		    defineProperty(&ModeNP);
 		    defineProperty(&StepsPerRotation0NP);
 		    defineProperty(&StepsPerRotation1NP);
+		    defineProperty(&PECPositionNP);
 		    defineProperty(&DeviceValNP);
 		    defineProperty(MotorTypeRATP);
 		    defineProperty(MotorTypeDETP);
@@ -836,6 +840,7 @@ bool EQMod::updateProperties()
 		deleteProperty(ModeNP.name);
 		deleteProperty(StepsPerRotation0NP.name);
 		deleteProperty(StepsPerRotation1NP.name);
+		deleteProperty(PECPositionNP.name);
 		deleteProperty(DeviceValNP.name);
 		deleteProperty(RetrieveValSP.name);
 		deleteProperty(SaveDeviceeValSP.name);

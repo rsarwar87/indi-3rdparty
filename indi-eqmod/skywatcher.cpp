@@ -973,6 +973,14 @@ void Skywatcher::ReadMotorStatus(SkywatcherAxis axis)
             encoder_readback = koheron_interface->get_iic_encoder();
             telescope->PECErrorTP.update(encoder_readback[1] & 0x1 ? err : en, (char **)propnames, 1);
             telescope->PECErrorTP.apply();
+
+
+	          telescope->PECPositionNP.s=IPS_OK;
+            IDSetNumber(&(telescope->PECPositionNP), nullptr);
+            telescope->PECPosition[0].value = encoder_readback[0];
+            telescope->PECPosition[1].value = encoder_readback[1];
+	          telescope->PECPositionNP.s=IPS_BUSY;
+            IDSetNumber(&(telescope->PECPositionNP), nullptr);
             break;
                 
         case Axis2:

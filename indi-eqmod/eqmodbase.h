@@ -121,6 +121,8 @@ protected:
         INDI::PropertyText     MotorTypeDETP  {1};
         INDI::PropertyText     PECTP  {1};
         INDI::PropertyText     PECErrorTP  {1};
+	INumber PECPosition[3];
+	INumberVectorProperty PECPositionNP;
 
         bool pec_enable = false;
     protected:
