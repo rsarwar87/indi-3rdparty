@@ -183,7 +183,7 @@ bool ATIKCCD::initProperties()
                        ISR_1OFMANY, 60, IPS_IDLE);
 #endif
 
-    IUSaveText(&BayerT[2], "RGGB");
+    BayerTP[2].setText("RGGB");
 
     INDI::FilterInterface::initProperties(FILTER_TAB);
 
@@ -208,8 +208,8 @@ bool ATIKCCD::updateProperties()
         // Even if there is no cooler, we define temperature property as READ ONLY
         else
         {
-            TemperatureNP.p = IP_RO;
-            defineProperty(&TemperatureNP);
+            TemperatureNP.setPermission(IP_RO);
+            defineProperty(TemperatureNP);
         }
 
         if (m_isHorizon)
@@ -243,7 +243,7 @@ bool ATIKCCD::updateProperties()
             deleteProperty(CoolerSP.name);
         }
         else
-            deleteProperty(TemperatureNP.name);
+            deleteProperty(TemperatureNP);
 
         if (m_isHorizon)
         {
@@ -340,8 +340,8 @@ bool ATIKCCD::setupParams()
     if (colorType == ARTEMIS_COLOUR_RGGB)
     {
         cap |= CCD_HAS_BAYER;
-        IUSaveText(&BayerT[0], std::to_string(normalOffsetX).c_str());
-        IUSaveText(&BayerT[1], std::to_string(normalOffsetY).c_str());
+        BayerTP[0].setText(std::to_string(normalOffsetX).c_str());
+        BayerTP[1].setText(std::to_string(normalOffsetY).c_str());
     }
 
     LOGF_DEBUG("Camera is %s.", colorType == ARTEMIS_COLOUR_RGGB ? "Color" : "Mono");
@@ -781,28 +781,35 @@ bool ATIKCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, ch
 
             bool enabled = (CoolerS[COOLER_ON].s == ISS_ON);
 
-            // If user turns on cooler, but the requested temperature is higher than current temperature
-            // then we set temperature to zero degrees. If that was still higher than current temperature
-            // we return an error
-            if (enabled && TemperatureRequest > TemperatureN[0].value)
+            // If user turns on cooler, but the requested temperature is higher than current temperature by more
+            // than five degrees, then we consider this endangers the device and we alter the temperature target.
+            // The five degrees tolerance is there to adapt to cooling overshoot.
+            if (enabled && TemperatureNP[0].getValue() + 5.0f < TemperatureRequest)
             {
-                TemperatureRequest = 0;
-                // If current temperature is still lower than zero, then we shouldn't risk
-                // setting temperature to any arbitrary value. Instead, we report an error and ask
-                // user to explicitly set the requested temperature.
-                if (TemperatureRequest > TemperatureN[0].value)
+                LOGF_WARN("Current temperature is %.2f, refusing to set %.2f (5 degrees warming tolerance). "
+                          "To control cooler, request a lower temperature or let the device warm above %.2f.",
+                          TemperatureNP[0].getValue(), TemperatureRequest, TemperatureRequest - 5.0f);
+
+                // If current temperature is lower than zero, then we shouldn't risk
+                // setting temperature to any arbitrary value. Instead, we turn the cooler off and ask
+                // user to explicitly set a new temperature.
+                if (TemperatureNP[0].getValue() < 0)
                 {
                     CoolerS[COOLER_ON].s = ISS_OFF;
-                    CoolerS[COOLER_OFF].s = ISS_OFF;
+                    CoolerS[COOLER_OFF].s = ISS_ON;
                     CoolerSP.s = IPS_ALERT;
-                    LOGF_WARN("Cannot manually activate cooler since current temperature is %.2f. To activate cooler, request a lower temperature.",
-                              TemperatureN[0].value);
+                    LOGF_WARN("Stopping cooler. "
+                              "To re-activate, request a lower temperature or let the device warm above %.2f.",
+                              TemperatureRequest);
                     IDSetSwitch(&CoolerSP, nullptr);
-                    return true;
                 }
-
-                SetTemperature(0);
-                return true;
+                // Else we consider we should stabilise at a safe temperature, and set the target to zero degrees.
+                else
+                {
+                    LOG_WARN("Keeping cooler activated, but setting temperature to 0 degrees. "
+                             "To proceed, wait for the device to stabilise or stop the cooler.");
+                    SetTemperature(0);
+                }
             }
 
             return activateCooler(enabled);
@@ -905,7 +912,7 @@ bool ATIKCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, ch
 int ATIKCCD::SetTemperature(double temperature)
 {
     // If there difference, for example, is less than 0.1 degrees, let's immediately return OK.
-    if (fabs(temperature - TemperatureN[0].value) < TEMP_THRESHOLD)
+    if (fabs(temperature - TemperatureNP[0].getValue()) < TEMP_THRESHOLD)
         return 1;
 
     // setpoint is int 1/100 of a degree C.
@@ -932,7 +939,7 @@ bool ATIKCCD::activateCooler(bool enable)
     IUResetSwitch(&CoolerSP);
     if (enable)
     {
-        if (TemperatureRequest < TemperatureN[0].value)
+        if (TemperatureRequest < TemperatureNP[0].getValue())
         {
             if (CoolerSP.s != IPS_BUSY)
                 LOG_INFO("Camera cooler is on.");
@@ -1123,7 +1130,7 @@ bool ATIKCCD::grabImage()
 /////////////////////////////////////////////////////////
 void ATIKCCD::TimerHit()
 {
-    double currentTemperature = TemperatureN[0].value;
+    double currentTemperature = TemperatureNP[0].getValue();
 
     int flags, level, minlvl, maxlvl, setpoint;
 
@@ -1145,15 +1152,15 @@ void ATIKCCD::TimerHit()
     pthread_mutex_lock(&accessMutex);
     rc = ArtemisTemperatureSensorInfo(hCam, 1, &temperature);
     pthread_mutex_unlock(&accessMutex);
-    TemperatureN[0].value = temperature / 100.0;
+    TemperatureNP[0].setValue(temperature / 100.0);
 
-    switch (TemperatureNP.s)
+    switch (TemperatureNP.getState())
     {
         case IPS_IDLE:
         case IPS_OK:
-            if (fabs(currentTemperature - TemperatureN[0].value)  > TEMP_THRESHOLD / 10.0)
+            if (fabs(currentTemperature - TemperatureNP[0].getValue())  > TEMP_THRESHOLD / 10.0)
             {
-                IDSetNumber(&TemperatureNP, nullptr);
+                TemperatureNP.apply();
             }
             break;
 
@@ -1166,7 +1173,7 @@ void ATIKCCD::TimerHit()
             //            {
             //                TemperatureNP.s = IPS_OK;
             //            }
-            IDSetNumber(&TemperatureNP, nullptr);
+            TemperatureNP.apply();
             break;
     }
 

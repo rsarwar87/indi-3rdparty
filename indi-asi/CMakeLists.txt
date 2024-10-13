@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 PROJECT(indi_asi CXX C)
 
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
@@ -13,7 +13,7 @@ find_package(USB1 REQUIRED)
 find_package(Threads REQUIRED)
 
 set(ASI_VERSION_MAJOR 2)
-set(ASI_VERSION_MINOR 3)
+set(ASI_VERSION_MINOR 4)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h )
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/indi_asi.xml.cmake ${CMAKE_CURRENT_BINARY_DIR}/indi_asi.xml)
@@ -96,14 +96,14 @@ ENDIF()
 
 #####################################
 
-if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
+if (CMAKE_SYSTEM_NAME MATCHES "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
 target_link_libraries(indi_asi_ccd rt)
 target_link_libraries(indi_asi_single_ccd rt)
 target_link_libraries(indi_asi_wheel rt)
 target_link_libraries(indi_asi_st4 rt)
 target_link_libraries(indi_asi_focuser rt)
 target_link_libraries(asi_camera_test rt)
-endif (CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
+endif (CMAKE_SYSTEM_NAME MATCHES "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm*")
 
 install(TARGETS indi_asi_ccd RUNTIME DESTINATION bin)
 install(TARGETS indi_asi_single_ccd RUNTIME DESTINATION bin)
